@@ -1,56 +1,158 @@
+import {
+  Fraunces_500Medium,
+  Fraunces_600SemiBold,
+  Fraunces_600SemiBold_Italic,
+} from '@expo-google-fonts/fraunces';
+import {
+  PlusJakartaSans_400Regular,
+  PlusJakartaSans_500Medium,
+  PlusJakartaSans_600SemiBold,
+  PlusJakartaSans_700Bold,
+} from '@expo-google-fonts/plus-jakarta-sans';
 import { useFonts } from 'expo-font';
-import { DarkTheme, DefaultTheme, Stack, ThemeProvider } from 'expo-router';
+import { DarkTheme, Stack, ThemeProvider as NavThemeProvider } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
-import { useEffect } from 'react';
+import { useEffect, useMemo } from 'react';
+import { StatusBar } from 'expo-status-bar';
 import 'react-native-reanimated';
 
-import { useColorScheme } from '@/components/useColorScheme';
+import { Fonts } from '@/constants/Colors';
+import { AuthProvider } from '@/src/auth/AuthContext';
+import { CalendarProvider } from '@/src/calendar/CalendarContext';
+import { TodoProvider } from '@/src/context/TodoContext';
+import { ThemeProvider, useAppTheme } from '@/src/theme/ThemeContext';
+import { PreferencesProvider } from '@/src/preferences/PreferencesContext';
+import { NotificationScheduler } from '@/src/notifications/NotificationScheduler';
 
-export {
-  // Catch any errors thrown by the Layout component.
-  ErrorBoundary,
-} from 'expo-router';
+export { ErrorBoundary } from 'expo-router';
 
 export const unstable_settings = {
-  // Ensure that reloading on `/modal` keeps a back button present.
   initialRouteName: '(tabs)',
 };
 
-// Prevent the splash screen from auto-hiding before asset loading is complete.
 SplashScreen.preventAutoHideAsync();
 
 export default function RootLayout() {
   const [loaded, error] = useFonts({
-    SpaceMono: require('../assets/fonts/SpaceMono-Regular.ttf'),
+    Fraunces_500Medium,
+    Fraunces_600SemiBold,
+    Fraunces_600SemiBold_Italic,
+    PlusJakartaSans_400Regular,
+    PlusJakartaSans_500Medium,
+    PlusJakartaSans_600SemiBold,
+    PlusJakartaSans_700Bold,
   });
 
-  // Expo Router uses Error Boundaries to catch errors in the navigation tree.
   useEffect(() => {
     if (error) throw error;
   }, [error]);
 
   useEffect(() => {
-    if (loaded) {
-      SplashScreen.hideAsync();
-    }
+    if (loaded) SplashScreen.hideAsync();
   }, [loaded]);
 
-  if (!loaded) {
-    return null;
-  }
+  if (!loaded) return null;
 
-  return <RootLayoutNav />;
+  return (
+    <ThemeProvider>
+      <PreferencesProvider>
+        <AuthProvider>
+          <CalendarProvider>
+            <TodoProvider>
+              <NotificationScheduler />
+              <RootLayoutNav />
+            </TodoProvider>
+          </CalendarProvider>
+        </AuthProvider>
+      </PreferencesProvider>
+    </ThemeProvider>
+  );
 }
 
 function RootLayoutNav() {
-  const colorScheme = useColorScheme();
+  const { colors } = useAppTheme();
+
+  const navTheme = useMemo(
+    () => ({
+      ...DarkTheme,
+      colors: {
+        ...DarkTheme.colors,
+        primary: colors.tint,
+        background: colors.background,
+        card: colors.surfaceSolid,
+        text: colors.text,
+        border: colors.border,
+      },
+      fonts: {
+        regular: { fontFamily: Fonts.body, fontWeight: '400' as const },
+        medium: { fontFamily: Fonts.bodyMedium, fontWeight: '500' as const },
+        bold: { fontFamily: Fonts.bodySemi, fontWeight: '600' as const },
+        heavy: { fontFamily: Fonts.bodySemi, fontWeight: '700' as const },
+      },
+    }),
+    [colors]
+  );
 
   return (
-    <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
+    <NavThemeProvider value={navTheme}>
+      <StatusBar style="light" />
       <Stack>
         <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-        <Stack.Screen name="modal" options={{ presentation: 'modal' }} />
+        <Stack.Screen
+          name="edit"
+          options={{
+            presentation: 'modal',
+            title: 'Dock this',
+            headerShadowVisible: false,
+            headerStyle: { backgroundColor: colors.surfaceSolid },
+            headerTintColor: colors.tint,
+            headerTitleStyle: {
+              fontFamily: Fonts.bodyMedium,
+              color: colors.text,
+            },
+          }}
+        />
+        <Stack.Screen
+          name="settings/customization"
+          options={{
+            title: 'Customization',
+            headerShadowVisible: false,
+            headerStyle: { backgroundColor: colors.background },
+            headerTintColor: colors.tint,
+            headerTitleStyle: { fontFamily: Fonts.bodyMedium, color: colors.text },
+          }}
+        />
+        <Stack.Screen
+          name="settings/notifications"
+          options={{
+            title: 'Notifications',
+            headerShadowVisible: false,
+            headerStyle: { backgroundColor: colors.background },
+            headerTintColor: colors.tint,
+            headerTitleStyle: { fontFamily: Fonts.bodyMedium, color: colors.text },
+          }}
+        />
+        <Stack.Screen
+          name="settings/advanced"
+          options={{
+            title: 'Advanced',
+            headerShadowVisible: false,
+            headerStyle: { backgroundColor: colors.background },
+            headerTintColor: colors.tint,
+            headerTitleStyle: { fontFamily: Fonts.bodyMedium, color: colors.text },
+          }}
+        />
+        <Stack.Screen
+          name="settings/account"
+          options={{
+            title: 'Google Calendar',
+            headerShadowVisible: false,
+            headerStyle: { backgroundColor: colors.background },
+            headerTintColor: colors.tint,
+            headerTitleStyle: { fontFamily: Fonts.bodyMedium, color: colors.text },
+          }}
+        />
       </Stack>
-    </ThemeProvider>
+    </NavThemeProvider>
   );
 }

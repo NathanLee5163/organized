@@ -1,19 +1,18 @@
-const tintColorLight = '#2f95dc';
-const tintColorDark = '#fff';
+import { THEMES, DEFAULT_THEME_ID } from '@/constants/themes';
+
+/** @deprecated Prefer useThemeColors() — kept for legacy Themed helpers. */
+const fallback = THEMES[DEFAULT_THEME_ID].colors;
 
 export default {
-  light: {
-    text: '#000',
-    background: '#fff',
-    tint: tintColorLight,
-    tabIconDefault: '#ccc',
-    tabIconSelected: tintColorLight,
-  },
-  dark: {
-    text: '#fff',
-    background: '#000',
-    tint: tintColorDark,
-    tabIconDefault: '#ccc',
-    tabIconSelected: tintColorDark,
-  },
+  light: fallback,
+  dark: fallback,
+};
+
+export const Fonts = {
+  display: 'Fraunces_600SemiBold',
+  displaySoft: 'Fraunces_500Medium',
+  displayItalic: 'Fraunces_600SemiBold_Italic',
+  body: 'PlusJakartaSans_400Regular',
+  bodyMedium: 'PlusJakartaSans_500Medium',
+  bodySemi: 'PlusJakartaSans_600SemiBold',
 };
