@@ -1,5 +1,6 @@
 import type { GoogleCalendarEvent, Todo } from '@/src/types/todo';
 import { isoToMinutes, toDateKey } from '@/src/utils/dates';
+import { parseExdatesFromGoogleRecurrence } from '@/src/utils/recurrence';
 import { newId } from '@/src/utils/todoFactory';
 
 function eventDateKey(event: GoogleCalendarEvent): string | null {
@@ -42,6 +43,12 @@ export function googleEventToTodo(
         ? existing?.recurrence ?? null
         : null;
 
+  const fromGoogle = parseExdatesFromGoogleRecurrence(event.recurrence);
+  const exdates =
+    fromGoogle.length > 0
+      ? fromGoogle
+      : existing?.exdates ?? [];
+
   if (isAllDay) {
     return {
       id: appId,
@@ -51,6 +58,10 @@ export function googleEventToTodo(
       startMinutes: null,
       durationMinutes: 30,
       recurrence,
+      exdates,
+      inbox: false,
+      dockedFromLoose: existing?.dockedFromLoose ?? false,
+      dockCount: existing?.dockCount ?? 0,
       completed,
       calendarId,
       googleEventId: event.id,
@@ -78,6 +89,10 @@ export function googleEventToTodo(
     startMinutes,
     durationMinutes,
     recurrence,
+    exdates,
+    inbox: false,
+    dockedFromLoose: existing?.dockedFromLoose ?? false,
+    dockCount: existing?.dockCount ?? 0,
     completed,
     calendarId,
     googleEventId: event.id,
@@ -90,13 +105,25 @@ export function googleEventToTodo(
 export function preferNewer(local: Todo, remote: Todo): Todo {
   const localTs = new Date(local.updatedAt).getTime();
   const remoteTs = new Date(remote.updatedAt).getTime();
-  if (remoteTs > localTs) {
-    return { ...remote, id: local.id };
+    if (remoteTs > localTs) {
+    return {
+      ...remote,
+      id: local.id,
+      dockedFromLoose: local.dockedFromLoose || remote.dockedFromLoose,
+      dockCount: Math.max(local.dockCount ?? 0, remote.dockCount ?? 0),
+    };
   }
   return {
     ...local,
     googleEventId: remote.googleEventId ?? local.googleEventId,
     calendarId: remote.calendarId ?? local.calendarId,
     recurrence: remote.recurrence ?? local.recurrence,
+    inbox: local.inbox || remote.inbox,
+    dockedFromLoose: local.dockedFromLoose || remote.dockedFromLoose,
+    dockCount: Math.max(local.dockCount ?? 0, remote.dockCount ?? 0),
+    exdates:
+      (remote.exdates?.length ?? 0) >= (local.exdates?.length ?? 0)
+        ? remote.exdates ?? local.exdates
+        : local.exdates,
   };
 }

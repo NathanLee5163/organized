@@ -1,7 +1,7 @@
 import Constants from 'expo-constants';
 import { useRouter } from 'expo-router';
 import { useEffect, useState } from 'react';
-import { Linking, Platform, ScrollView, StyleSheet, Text } from 'react-native';
+import { Platform, ScrollView, StyleSheet, Text } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Brand } from '@/constants/Brand';
@@ -74,7 +74,7 @@ export default function SettingsHomeScreen() {
           />
           <SettingsRow
             label="Advanced"
-            subtitle="Defaults, week start, haptics"
+            subtitle="Defaults, week start, sounds, haptics"
             icon={{ ios: 'gearshape.2.fill', android: 'tune', web: 'tune' }}
             iconColor="#5B8DEF"
             last
@@ -100,9 +100,7 @@ export default function SettingsHomeScreen() {
             label="Privacy"
             subtitle="How calendar data is handled"
             last
-            onPress={() =>
-              Linking.openURL('https://policies.google.com/privacy').catch(() => undefined)
-            }
+            onPress={() => router.push({ pathname: '/settings/privacy' })}
           />
         </SettingsSection>
 

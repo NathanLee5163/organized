@@ -84,6 +84,7 @@ export function FloatingTabBar({ state, descriptors, navigation }: Props) {
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const { dateKey } = useTodos();
+  const focusedRoute = state.routes[state.index]?.name;
 
   return (
     <View style={[styles.wrap, { paddingBottom: Math.max(insets.bottom, 10) }]}>
@@ -121,7 +122,13 @@ export function FloatingTabBar({ state, descriptors, navigation }: Props) {
         })}
 
         <PressableScale
-          onPress={() => router.push({ pathname: '/edit', params: { date: dateKey } })}
+          onPress={() =>
+            router.push(
+              focusedRoute === 'anytime'
+                ? { pathname: '/edit', params: { kind: 'anytime', inbox: '1' } }
+                : { pathname: '/edit', params: { date: dateKey } }
+            )
+          }
           style={styles.fabOuter}
           scaleTo={0.92}>
           <LinearGradient

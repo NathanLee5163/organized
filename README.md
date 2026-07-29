@@ -231,10 +231,11 @@ npx eas build --platform ios --profile production    # App Store binary
 
 ## Privacy notes
 
+- In-app policy: **Deck → Privacy** (also see [docs/SHIP.md](docs/SHIP.md))
 - Google tokens are stored on-device (Secure Store on native)
 - Calendar data is read/written only with the user’s OAuth consent
 - While the Google OAuth app is in **Testing**, only listed test users can sign in
-- For a public App Store release you’ll need a privacy policy URL and Google’s verification for sensitive Calendar scopes
+- For a public App Store release you’ll need a hosted privacy policy URL and Google’s verification for sensitive Calendar scopes
 
 ---
 

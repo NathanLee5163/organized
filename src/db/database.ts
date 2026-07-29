@@ -20,7 +20,11 @@ export async function getDb(): Promise<SQLite.SQLiteDatabase> {
           google_event_id TEXT,
           updated_at TEXT NOT NULL,
           deleted_at TEXT,
-          recurrence TEXT
+          recurrence TEXT,
+          exdates TEXT,
+          inbox INTEGER NOT NULL DEFAULT 0,
+          docked_from_loose INTEGER NOT NULL DEFAULT 0,
+          dock_count INTEGER NOT NULL DEFAULT 0
         );
         CREATE INDEX IF NOT EXISTS idx_todos_date ON todos(date);
         CREATE TABLE IF NOT EXISTS sync_queue (
@@ -40,6 +44,42 @@ export async function getDb(): Promise<SQLite.SQLiteDatabase> {
         await db.execAsync('ALTER TABLE todos ADD COLUMN recurrence TEXT');
       } catch {
         // column already exists
+      }
+      try {
+        await db.execAsync('ALTER TABLE todos ADD COLUMN exdates TEXT');
+      } catch {
+        // column already exists
+      }
+      try {
+        await db.execAsync(
+          'ALTER TABLE todos ADD COLUMN inbox INTEGER NOT NULL DEFAULT 0'
+        );
+      } catch {
+        // column already exists
+      }
+      try {
+        await db.execAsync(
+          'ALTER TABLE todos ADD COLUMN docked_from_loose INTEGER NOT NULL DEFAULT 0'
+        );
+      } catch {
+        // column already exists
+      }
+      try {
+        await db.execAsync(
+          'ALTER TABLE todos ADD COLUMN dock_count INTEGER NOT NULL DEFAULT 0'
+        );
+      } catch {
+        // column already exists
+      }
+      // Existing anytime tasks become open-ended Loose items.
+      try {
+        await db.execAsync(
+          `UPDATE todos SET inbox = 1
+           WHERE kind = 'anytime' AND (inbox IS NULL OR inbox = 0)
+             AND (google_event_id IS NULL OR google_event_id = '')`
+        );
+      } catch {
+        // ignore
       }
       return db;
     })();

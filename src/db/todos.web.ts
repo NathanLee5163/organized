@@ -11,6 +11,11 @@ async function readTodos(): Promise<Todo[]> {
     return (JSON.parse(raw) as Todo[]).map((t) => ({
       ...t,
       recurrence: t.recurrence ?? null,
+      exdates: Array.isArray(t.exdates) ? t.exdates : [],
+      // Promote legacy undated anytime into the Loose inbox.
+      inbox: t.inbox ?? t.kind === 'anytime',
+      dockedFromLoose: t.dockedFromLoose ?? false,
+      dockCount: t.dockCount ?? 0,
     }));
   } catch {
     return [];
@@ -55,12 +60,12 @@ export async function upsertTodos(list: Todo[]): Promise<void> {
 }
 
 export async function getTodosForDate(date: string): Promise<Todo[]> {
-  const todos = (await readTodos()).filter((t) => !t.deletedAt);
+  const todos = (await readTodos()).filter((t) => !t.deletedAt && !t.inbox);
   const expanded: Todo[] = [];
   const seen = new Set<string>();
   for (const todo of todos) {
     const recurrence = parseRecurrence(todo.recurrence, todo.date);
-    if (!occursOnDate(todo.date, recurrence, date)) continue;
+    if (!occursOnDate(todo.date, recurrence, date, todo.exdates ?? [])) continue;
     const view = occurrenceView(todo, date);
     if (seen.has(view.id)) continue;
     seen.add(view.id);
@@ -101,13 +106,13 @@ export async function countTodos(): Promise<number> {
 }
 
 export async function getTodosBetween(startDate: string, endDate: string): Promise<Todo[]> {
-  const todos = (await readTodos()).filter((t) => !t.deletedAt);
+  const todos = (await readTodos()).filter((t) => !t.deletedAt && !t.inbox);
   const expanded: Todo[] = [];
   for (const todo of todos) {
     const recurrence = parseRecurrence(todo.recurrence, todo.date);
     let cursor = startDate;
     while (cursor <= endDate) {
-      if (occursOnDate(todo.date, recurrence, cursor)) {
+      if (occursOnDate(todo.date, recurrence, cursor, todo.exdates ?? [])) {
         expanded.push(occurrenceView(todo, cursor));
       }
       const d = new Date(
@@ -126,4 +131,23 @@ export async function getTodosBetween(startDate: string, endDate: string): Promi
     if (a.date !== b.date) return a.date.localeCompare(b.date);
     return (a.startMinutes ?? 0) - (b.startMinutes ?? 0);
   });
+}
+
+export async function searchTodos(query: string, limit = 40): Promise<Todo[]> {
+  const q = query.trim().toLowerCase();
+  if (!q) return [];
+  const todos = (await readTodos()).filter((t) => !t.deletedAt);
+  return todos
+    .filter((t) => t.title.toLowerCase().includes(q))
+    .sort((a, b) => b.date.localeCompare(a.date))
+    .slice(0, limit);
+}
+
+export async function getInboxTodos(): Promise<Todo[]> {
+  return (await readTodos())
+    .filter((t) => !t.deletedAt && t.inbox)
+    .sort((a, b) => {
+      if (a.completed !== b.completed) return a.completed ? 1 : -1;
+      return b.updatedAt.localeCompare(a.updatedAt);
+    });
 }

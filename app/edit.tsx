@@ -24,7 +24,11 @@ import { useCalendars } from '@/src/calendar/CalendarContext';
 import { useTodos } from '@/src/context/TodoContext';
 import { usePreferences } from '@/src/preferences/PreferencesContext';
 import type { TodoKind } from '@/src/types/todo';
-import { formatDisplayDate, startOfMonth, toDateKey } from '@/src/utils/dates';
+import {
+  formatDisplayDate,
+  startOfMonth,
+  toDateKey,
+} from '@/src/utils/dates';
 import {
   NO_REPEAT,
   type Recurrence,
@@ -39,27 +43,36 @@ export default function EditScreen() {
   const { writeCalendarId } = useCalendars();
   const router = useRouter();
   const navigation = useNavigation();
-  const params = useLocalSearchParams<{ id?: string; date?: string; kind?: string }>();
-  const { getTodo, addTodo, updateTodo, removeTodo, dateKey, markedDates } = useTodos();
+  const params = useLocalSearchParams<{
+    id?: string;
+    date?: string;
+    kind?: string;
+    inbox?: string;
+  }>();
+  const { getTodo, addTodo, updateTodo, updateTodoScoped, removeTodo, dateKey, markedDates } =
+    useTodos();
+
+  const openingAsInbox = params.inbox === '1' || params.kind === 'anytime';
+  const occurrenceDate = params.date ?? dateKey ?? toDateKey(new Date());
 
   const [loading, setLoading] = useState(Boolean(params.id));
   const [title, setTitle] = useState('');
-  const [date, setDate] = useState(params.date ?? dateKey ?? toDateKey(new Date()));
-  const [monthCursor, setMonthCursor] = useState(
-    startOfMonth(params.date ?? dateKey ?? toDateKey(new Date()))
-  );
-  const [anytime, setAnytime] = useState(params.kind === 'anytime');
+  const [date, setDate] = useState(occurrenceDate);
+  const [monthCursor, setMonthCursor] = useState(startOfMonth(occurrenceDate));
+  const [inboxMode, setInboxMode] = useState(openingAsInbox);
+  const [anytime, setAnytime] = useState(openingAsInbox);
   const [hour, setHour] = useState(9);
   const [minute, setMinute] = useState(30);
   const [duration, setDuration] = useState<number>(defaultDuration);
   const [recurrence, setRecurrence] = useState<Recurrence>(NO_REPEAT);
-  const [seriesStartDate, setSeriesStartDate] = useState(
-    params.date ?? dateKey ?? toDateKey(new Date())
-  );
+  const [seriesStartDate, setSeriesStartDate] = useState(occurrenceDate);
   const [existingId, setExistingId] = useState<string | null>(params.id ?? null);
   const [googleEventId, setGoogleEventId] = useState<string | null>(null);
   const [calendarId, setCalendarId] = useState<string | null>(null);
   const [completed, setCompleted] = useState(false);
+  const [exdates, setExdates] = useState<string[]>([]);
+  const [dockedFromLoose, setDockedFromLoose] = useState(false);
+  const [dockCount, setDockCount] = useState(0);
 
   useEffect(() => {
     if (!params.id && writeCalendarId && !calendarId) {
@@ -87,10 +100,12 @@ export default function EditScreen() {
       }
       setExistingId(todo.id);
       setTitle(todo.title);
-      setDate(todo.date);
       setSeriesStartDate(todo.date);
-      setMonthCursor(startOfMonth(todo.date));
-      setAnytime(todo.kind === 'anytime');
+      const openOn = params.date ?? todo.date;
+      setDate(openOn);
+      setMonthCursor(startOfMonth(openOn));
+      setInboxMode(todo.inbox);
+      setAnytime(todo.kind === 'anytime' || todo.inbox);
       if (todo.startMinutes != null) {
         setHour(Math.floor(todo.startMinutes / 60));
         setMinute(todo.startMinutes % 60);
@@ -100,16 +115,25 @@ export default function EditScreen() {
       setGoogleEventId(todo.googleEventId);
       setCalendarId(todo.calendarId);
       setCompleted(todo.completed);
+      setExdates(todo.exdates ?? []);
+      setDockedFromLoose(todo.dockedFromLoose ?? false);
+      setDockCount(todo.dockCount ?? 0);
       setLoading(false);
     })();
     return () => {
       cancelled = true;
     };
-  }, [getTodo, params.id]);
+  }, [getTodo, params.date, params.id]);
 
   useLayoutEffect(() => {
     navigation.setOptions({
-      title: existingId ? 'Edit task' : 'New task',
+      title: inboxMode
+        ? existingId
+          ? 'Edit loose end'
+          : 'New loose end'
+        : existingId
+          ? 'Edit task'
+          : 'New task',
       headerStyle: { backgroundColor: colors.background },
       headerTintColor: colors.text,
       headerTitleStyle: {
@@ -117,12 +141,13 @@ export default function EditScreen() {
         color: colors.text,
       },
     });
-  }, [colors.background, colors.text, existingId, navigation]);
+  }, [colors.background, colors.text, existingId, inboxMode, navigation]);
 
-  const kind: TodoKind = anytime ? 'anytime' : 'timed';
-  const startMinutes = anytime ? null : hour * 60 + minute;
+  const kind: TodoKind = inboxMode || anytime ? 'anytime' : 'timed';
+  const startMinutes = inboxMode || anytime ? null : hour * 60 + minute;
   const canSave = useMemo(() => title.trim().length > 0, [title]);
-  const recurrenceRule = serializeRecurrence(recurrence);
+  const recurrenceRule = inboxMode ? null : serializeRecurrence(recurrence);
+  const isRepeating = !inboxMode && recurrence.preset !== 'none';
 
   const onChangeDate = (next: string) => {
     setDate(next);
@@ -137,36 +162,103 @@ export default function EditScreen() {
     }
   };
 
+  const setLooseList = (on: boolean) => {
+    setInboxMode(on);
+    setAnytime(on);
+    if (on) setRecurrence(NO_REPEAT);
+  };
+
+  const buildPayload = () => ({
+    id: existingId!,
+    title: title.trim(),
+    date: inboxMode ? seriesStartDate || date : seriesStartDate,
+    kind,
+    startMinutes,
+    durationMinutes: duration,
+    recurrence: recurrenceRule,
+    exdates: inboxMode ? [] : exdates,
+    inbox: inboxMode,
+    dockedFromLoose: inboxMode ? false : dockedFromLoose,
+    dockCount,
+    completed,
+    calendarId: inboxMode ? null : calendarId,
+    googleEventId: inboxMode ? null : googleEventId,
+    updatedAt: new Date().toISOString(),
+    deletedAt: null,
+  });
+
+  const saveSeries = async () => {
+    await updateTodo({
+      ...buildPayload(),
+      date: existingId ? seriesStartDate : date,
+      recurrence: recurrenceRule,
+    });
+  };
+
+  const saveOccurrence = async () => {
+    await updateTodoScoped(
+      {
+        ...buildPayload(),
+        date,
+        recurrence: null,
+        inbox: false,
+      },
+      'occurrence',
+      date
+    );
+  };
+
   const onSave = async () => {
     if (!canSave) return;
-    const anchorDate = existingId ? seriesStartDate : date;
     try {
-      if (existingId) {
-        await updateTodo({
-          id: existingId,
-          title: title.trim(),
-          date: anchorDate,
-          kind,
-          startMinutes,
-          durationMinutes: duration,
-          recurrence: recurrenceRule,
-          completed,
-          calendarId,
-          googleEventId,
-          updatedAt: new Date().toISOString(),
-          deletedAt: null,
-        });
-      } else {
+      if (!existingId) {
         await addTodo({
           title: title.trim(),
-          date: anchorDate,
+          date: inboxMode ? toDateKey(new Date()) : date,
           kind,
           startMinutes,
           durationMinutes: duration,
           recurrence: recurrenceRule,
-          calendarId,
+          inbox: inboxMode,
+          calendarId: inboxMode ? null : calendarId,
         });
+        router.back();
+        return;
       }
+
+      if (isRepeating) {
+        Alert.alert('Save changes', 'Apply edits to this day only, or the entire repeating series?', [
+          { text: 'Cancel', style: 'cancel' },
+          {
+            text: 'This day',
+            onPress: async () => {
+              try {
+                await saveOccurrence();
+                router.back();
+              } catch (e) {
+                Alert.alert('Could not save', e instanceof Error ? e.message : 'Unknown error');
+              }
+            },
+          },
+          {
+            text: 'Entire series',
+            onPress: async () => {
+              try {
+                await saveSeries();
+                router.back();
+              } catch (e) {
+                Alert.alert('Could not save', e instanceof Error ? e.message : 'Unknown error');
+              }
+            },
+          },
+        ]);
+        return;
+      }
+
+      await updateTodo({
+        ...buildPayload(),
+        date: inboxMode ? seriesStartDate || date : date,
+      });
       router.back();
     } catch (e) {
       Alert.alert('Could not save', e instanceof Error ? e.message : 'Unknown error');
@@ -175,22 +267,46 @@ export default function EditScreen() {
 
   const onDelete = () => {
     if (!existingId) return;
+    if (isRepeating) {
+      Alert.alert('Delete repeating task', 'Remove only this day, or the entire series?', [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'This day',
+          style: 'destructive',
+          onPress: async () => {
+            await removeTodo(existingId, { scope: 'occurrence', occurrenceDate: date });
+            router.back();
+          },
+        },
+        {
+          text: 'Entire series',
+          style: 'destructive',
+          onPress: async () => {
+            await removeTodo(existingId, { scope: 'series' });
+            router.back();
+          },
+        },
+      ]);
+      return;
+    }
+
     Alert.alert(
       'Delete task',
-      recurrence.preset !== 'none'
-        ? 'Remove this repeating task (entire series) from the app and Google Calendar?'
+      inboxMode
+        ? 'Remove this from your loose list?'
         : 'Remove this task from the app and Google Calendar?',
       [
-      { text: 'Cancel', style: 'cancel' },
-      {
-        text: 'Delete',
-        style: 'destructive',
-        onPress: async () => {
-          await removeTodo(existingId);
-          router.back();
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: async () => {
+            await removeTodo(existingId);
+            router.back();
+          },
         },
-      },
-    ]);
+      ]
+    );
   };
 
   if (loading) {
@@ -215,7 +331,7 @@ export default function EditScreen() {
           <TextInput
             value={title}
             onChangeText={setTitle}
-            placeholder="What needs doing?"
+            placeholder={inboxMode ? 'What do you need to get done?' : 'What needs doing?'}
             placeholderTextColor={colors.textSecondary}
             style={[
               styles.input,
@@ -228,53 +344,26 @@ export default function EditScreen() {
             autoFocus={!existingId}
           />
 
-          <Text style={[styles.label, { color: colors.textSecondary }]}>
-            Date · {formatDisplayDate(date)}
-          </Text>
-          <MiniMonthCalendar
-            compact
-            selectedDate={date}
-            onSelectDate={onChangeDate}
-            monthCursor={monthCursor}
-            onMonthChange={setMonthCursor}
-            markedDates={markedDates}
-          />
-
           <View
             style={[
               styles.switchRow,
               { backgroundColor: colors.bubble, borderColor: colors.hairline },
             ]}>
             <View style={{ flex: 1 }}>
-              <Text style={[styles.switchTitle, { color: colors.text }]}>Anytime</Text>
+              <Text style={[styles.switchTitle, { color: colors.text }]}>Loose list</Text>
               <Text style={{ color: colors.textSecondary, fontFamily: Fonts.body, fontSize: 13 }}>
-                No clock time · syncs as an all-day event
+                No clock, no day — stays open until you finish it
               </Text>
             </View>
             <Switch
-              value={anytime}
-              onValueChange={setAnytime}
+              value={inboxMode}
+              onValueChange={setLooseList}
               trackColor={{ true: colors.tint, false: colors.border }}
               thumbColor="#F7F8FA"
             />
           </View>
 
-          <RepeatPicker dateKey={date} value={recurrence} onChange={setRecurrence} />
-
-          <CategoryPicker value={calendarId} onChange={setCalendarId} />
-        </Animated.View>
-
-        <View>
-          {!anytime ? (
-            <AlarmTimePickers
-              hour24={hour}
-              minute={minute}
-              duration={duration}
-              onHourChange={setHour}
-              onMinuteChange={setMinute}
-              onDurationChange={setDuration}
-            />
-          ) : (
+          {inboxMode ? (
             <Text
               style={[
                 styles.anytimeHint,
@@ -284,10 +373,37 @@ export default function EditScreen() {
                   borderColor: colors.hairline,
                 },
               ]}>
-              This will sit in Anytime and sync as an all-day calendar event.
+              Lives on Loose until you check it off. Not parked on the runway or Google Calendar.
             </Text>
+          ) : (
+            <>
+              <Text style={[styles.label, { color: colors.textSecondary }]}>
+                Date · {formatDisplayDate(date)}
+                {isRepeating ? ' · repeating' : ''}
+              </Text>
+              <MiniMonthCalendar
+                compact
+                selectedDate={date}
+                onSelectDate={onChangeDate}
+                monthCursor={monthCursor}
+                onMonthChange={setMonthCursor}
+                markedDates={markedDates}
+              />
+
+              <RepeatPicker dateKey={date} value={recurrence} onChange={setRecurrence} />
+              <CategoryPicker value={calendarId} onChange={setCalendarId} />
+
+              <AlarmTimePickers
+                hour24={hour}
+                minute={minute}
+                duration={duration}
+                onHourChange={setHour}
+                onMinuteChange={setMinute}
+                onDurationChange={setDuration}
+              />
+            </>
           )}
-        </View>
+        </Animated.View>
 
         <View>
           <PressableScale
@@ -301,7 +417,7 @@ export default function EditScreen() {
               },
             ]}>
             <Text style={[styles.saveText, { color: colors.onTint }]}>
-              {existingId ? 'Save' : 'Add task'}
+              {existingId ? 'Save' : inboxMode ? 'Add to Loose' : 'Add task'}
             </Text>
           </PressableScale>
 

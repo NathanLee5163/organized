@@ -7,6 +7,8 @@ export default function AdvancedSettingsScreen() {
   const {
     hapticsEnabled,
     setHapticsEnabled,
+    soundsEnabled,
+    setSoundsEnabled,
     defaultDuration,
     cycleDefaultDuration,
     weekStartsOn,
@@ -32,6 +34,13 @@ export default function AdvancedSettingsScreen() {
       </SettingsSection>
 
       <SettingsSection title="Feedback">
+        <SettingsRow
+          kind="toggle"
+          label="Sounds"
+          subtitle="Quiet cue when you check something off"
+          value={soundsEnabled}
+          onValueChange={setSoundsEnabled}
+        />
         <SettingsRow
           kind="toggle"
           label="Haptics"

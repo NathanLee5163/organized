@@ -181,6 +181,9 @@ npx expo start
 | Timed task | Timed event |
 | Anytime task | All-day event |
 | Complete / edit / delete | Updates or deletes the event |
+| Delete / edit **this day** of a repeat | Adds `EXDATE` on the series (or splits a one-off) |
 | Events on selected calendars | Appear under Schedule or Anytime |
 
 Conflict rule: last write wins using `updated` timestamps. Offline edits are queued in SQLite and flushed on the next sync.
+
+For a shorter pre-ship checklist, see [SHIP.md](SHIP.md).

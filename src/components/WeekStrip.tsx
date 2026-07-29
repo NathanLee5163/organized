@@ -55,7 +55,10 @@ export function WeekStrip({ selectedDate, onSelectDate, markedDates = {}, compac
           const load = Math.min((markedDates[key] ?? 0) / 4, 1);
 
           return (
-            <Pressable key={key} onPress={() => onSelectDate(key)} style={styles.dayCol}>
+            <Pressable
+              key={key}
+              onPress={() => onSelectDate(key)}
+              style={styles.dayCol}>
               <Text
                 style={[
                   styles.dayName,
@@ -133,12 +136,14 @@ const styles = StyleSheet.create({
     fontSize: 34,
     letterSpacing: -0.8,
     lineHeight: 38,
+    minHeight: 38,
   },
   year: {
     fontFamily: Fonts.body,
     fontSize: 14,
     marginTop: 2,
     marginBottom: 16,
+    minHeight: 18,
   },
   track: {
     flexDirection: 'row',

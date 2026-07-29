@@ -93,18 +93,20 @@ export async function rescheduleNotifications(
 
   if (prefs.morningBriefingEnabled) {
     const todayKey = toDateKey(new Date());
-    const todayTodos = todos.filter((t) => t.date === todayKey && !t.completed);
+    const todayTodos = todos.filter(
+      (t) => !t.inbox && t.date === todayKey && !t.completed
+    );
     const timed = todayTodos.filter((t) => t.kind === 'timed').length;
-    const anytime = todayTodos.filter((t) => t.kind === 'anytime').length;
+    const looseOpen = todos.filter((t) => t.inbox && !t.completed).length;
 
     await Notifications.scheduleNotificationAsync({
       identifier: MORNING_ID,
       content: {
         title: 'Morning runway',
         body:
-          todayTodos.length === 0
+          todayTodos.length === 0 && looseOpen === 0
             ? 'Open day — nothing docked yet.'
-            : `${timed} timed · ${anytime} loose for today.`,
+            : `${timed} timed today · ${looseOpen} loose open.`,
         sound: true,
       },
       trigger: {

@@ -10,9 +10,11 @@ import {
 } from 'react';
 
 import { setHapticsEnabledGate } from '@/src/utils/haptics';
+import { setSoundsEnabledGate } from '@/src/utils/sounds';
 
 const KEYS = {
   haptics: 'prefs_haptics',
+  sounds: 'prefs_sounds',
   defaultDuration: 'prefs_default_duration',
   weekStartsOn: 'prefs_week_starts_on',
   taskReminders: 'prefs_task_reminders',
@@ -26,6 +28,7 @@ export type ReminderLead = 5 | 10 | 15 | 30;
 
 type Preferences = {
   hapticsEnabled: boolean;
+  soundsEnabled: boolean;
   defaultDuration: DefaultDuration;
   weekStartsOn: WeekStartsOn;
   taskRemindersEnabled: boolean;
@@ -36,6 +39,7 @@ type Preferences = {
 type PreferencesContextValue = Preferences & {
   ready: boolean;
   setHapticsEnabled: (value: boolean) => void;
+  setSoundsEnabled: (value: boolean) => void;
   setDefaultDuration: (value: DefaultDuration) => void;
   setWeekStartsOn: (value: WeekStartsOn) => void;
   setTaskRemindersEnabled: (value: boolean) => void;
@@ -48,6 +52,7 @@ type PreferencesContextValue = Preferences & {
 
 const DEFAULTS: Preferences = {
   hapticsEnabled: true,
+  soundsEnabled: true,
   defaultDuration: 30,
   weekStartsOn: 0,
   taskRemindersEnabled: false,
@@ -68,8 +73,9 @@ export function PreferencesProvider({ children }: { children: ReactNode }) {
     let cancelled = false;
     (async () => {
       try {
-        const [haptics, duration, week, reminders, lead, morning] = await Promise.all([
+        const [haptics, sounds, duration, week, reminders, lead, morning] = await Promise.all([
           AsyncStorage.getItem(KEYS.haptics),
+          AsyncStorage.getItem(KEYS.sounds),
           AsyncStorage.getItem(KEYS.defaultDuration),
           AsyncStorage.getItem(KEYS.weekStartsOn),
           AsyncStorage.getItem(KEYS.taskReminders),
@@ -78,8 +84,10 @@ export function PreferencesProvider({ children }: { children: ReactNode }) {
         ]);
         if (cancelled) return;
         const hapticsEnabled = haptics == null ? DEFAULTS.hapticsEnabled : haptics === '1';
+        const soundsEnabled = sounds == null ? DEFAULTS.soundsEnabled : sounds === '1';
         setPrefs({
           hapticsEnabled,
+          soundsEnabled,
           defaultDuration: ([15, 30, 45, 60].includes(Number(duration))
             ? Number(duration)
             : DEFAULTS.defaultDuration) as DefaultDuration,
@@ -91,6 +99,7 @@ export function PreferencesProvider({ children }: { children: ReactNode }) {
           morningBriefingEnabled: morning === '1',
         });
         setHapticsEnabledGate(hapticsEnabled);
+        setSoundsEnabledGate(soundsEnabled);
       } finally {
         if (!cancelled) setReady(true);
       }
@@ -104,10 +113,20 @@ export function PreferencesProvider({ children }: { children: ReactNode }) {
     setHapticsEnabledGate(prefs.hapticsEnabled);
   }, [prefs.hapticsEnabled]);
 
+  useEffect(() => {
+    setSoundsEnabledGate(prefs.soundsEnabled);
+  }, [prefs.soundsEnabled]);
+
   const setHapticsEnabled = useCallback((value: boolean) => {
     setPrefs((prev) => ({ ...prev, hapticsEnabled: value }));
     setHapticsEnabledGate(value);
     AsyncStorage.setItem(KEYS.haptics, value ? '1' : '0').catch(() => undefined);
+  }, []);
+
+  const setSoundsEnabled = useCallback((value: boolean) => {
+    setPrefs((prev) => ({ ...prev, soundsEnabled: value }));
+    setSoundsEnabledGate(value);
+    AsyncStorage.setItem(KEYS.sounds, value ? '1' : '0').catch(() => undefined);
   }, []);
 
   const setDefaultDuration = useCallback((value: DefaultDuration) => {
@@ -166,6 +185,7 @@ export function PreferencesProvider({ children }: { children: ReactNode }) {
       ...prefs,
       ready,
       setHapticsEnabled,
+      setSoundsEnabled,
       setDefaultDuration,
       setWeekStartsOn,
       setTaskRemindersEnabled,
@@ -179,6 +199,7 @@ export function PreferencesProvider({ children }: { children: ReactNode }) {
       prefs,
       ready,
       setHapticsEnabled,
+      setSoundsEnabled,
       setDefaultDuration,
       setWeekStartsOn,
       setTaskRemindersEnabled,

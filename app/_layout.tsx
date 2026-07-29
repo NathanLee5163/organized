@@ -23,6 +23,7 @@ import { TodoProvider } from '@/src/context/TodoContext';
 import { ThemeProvider, useAppTheme } from '@/src/theme/ThemeContext';
 import { PreferencesProvider } from '@/src/preferences/PreferencesContext';
 import { NotificationScheduler } from '@/src/notifications/NotificationScheduler';
+import { prepareSounds } from '@/src/utils/sounds';
 
 export { ErrorBoundary } from 'expo-router';
 
@@ -48,7 +49,10 @@ export default function RootLayout() {
   }, [error]);
 
   useEffect(() => {
-    if (loaded) SplashScreen.hideAsync();
+    if (loaded) {
+      SplashScreen.hideAsync();
+      void prepareSounds();
+    }
   }, [loaded]);
 
   if (!loaded) return null;
@@ -113,6 +117,20 @@ function RootLayoutNav() {
           }}
         />
         <Stack.Screen
+          name="search"
+          options={{
+            presentation: 'modal',
+            title: 'Search',
+            headerShadowVisible: false,
+            headerStyle: { backgroundColor: colors.background },
+            headerTintColor: colors.tint,
+            headerTitleStyle: {
+              fontFamily: Fonts.bodyMedium,
+              color: colors.text,
+            },
+          }}
+        />
+        <Stack.Screen
           name="settings/customization"
           options={{
             title: 'Customization',
@@ -146,6 +164,16 @@ function RootLayoutNav() {
           name="settings/account"
           options={{
             title: 'Google Calendar',
+            headerShadowVisible: false,
+            headerStyle: { backgroundColor: colors.background },
+            headerTintColor: colors.tint,
+            headerTitleStyle: { fontFamily: Fonts.bodyMedium, color: colors.text },
+          }}
+        />
+        <Stack.Screen
+          name="settings/privacy"
+          options={{
+            title: 'Privacy',
             headerShadowVisible: false,
             headerStyle: { backgroundColor: colors.background },
             headerTintColor: colors.tint,

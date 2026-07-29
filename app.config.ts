@@ -74,6 +74,15 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
         sounds: [],
       },
     ],
+    [
+      'expo-audio',
+      {
+        // UI sound effects only — no mic / background audio.
+        microphonePermission: false,
+        recordAudioAndroid: false,
+        enableBackgroundPlayback: false,
+      },
+    ],
   ],
   experiments: {
     typedRoutes: true,

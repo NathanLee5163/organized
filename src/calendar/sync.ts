@@ -6,6 +6,7 @@ import {
   listCalendars,
   listEvents,
   listEventsInRange,
+  todoToGoogleEventBody,
   updateEvent,
 } from '@/src/calendar/api';
 import { googleEventToTodo, preferNewer } from '@/src/calendar/mappers';
@@ -94,6 +95,28 @@ async function flushQueue(
   for (const item of queue) {
     const todo = JSON.parse(item.payload) as Todo;
     try {
+      // Open-ended Loose items stay on-device (no calendar day to mirror).
+      if (todo.inbox && item.op !== 'delete') {
+        await removeQueueItem(item.id);
+        continue;
+      }
+      if (todo.inbox && item.op === 'delete' && !todo.googleEventId) {
+        await hardDeleteTodo(todo.id);
+        await removeQueueItem(item.id);
+        continue;
+      }
+
+      // Drop poisoned payloads that can never succeed (avoids endless 400 spam).
+      if (item.op !== 'delete') {
+        try {
+          todoToGoogleEventBody(todo);
+        } catch (bodyError) {
+          console.warn('Dropping invalid queue item', item.id, bodyError);
+          await removeQueueItem(item.id);
+          continue;
+        }
+      }
+
       if (item.op === 'delete') {
         if (todo.googleEventId) {
           await deleteEventFromCalendars(accessToken, todo.googleEventId, [
@@ -205,7 +228,11 @@ export async function syncDay(accessToken: string, dateKey: string): Promise<Syn
     local.filter((t) => t.googleEventId).map((t) => [t.googleEventId as string, t])
   );
   const localUnlinked = local.filter(
-    (t) => !t.googleEventId && !t.deletedAt && !pendingDeleteIds.has(t.id)
+    (t) =>
+      !t.inbox &&
+      !t.googleEventId &&
+      !t.deletedAt &&
+      !pendingDeleteIds.has(t.id)
   );
 
   for (const remote of remoteByEventId.values()) {

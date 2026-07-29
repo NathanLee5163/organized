@@ -14,10 +14,14 @@ export function createTodo(input: {
   durationMinutes?: number;
   completed?: boolean;
   recurrence?: string | null;
+  exdates?: string[];
+  inbox?: boolean;
   calendarId?: string | null;
+  dockCount?: number;
 }): Todo {
   const kind = input.kind ?? (input.startMinutes != null ? 'timed' : 'anytime');
   const now = new Date().toISOString();
+  const inbox = input.inbox ?? kind === 'anytime';
   return {
     id: newId(),
     title: input.title.trim(),
@@ -25,7 +29,11 @@ export function createTodo(input: {
     kind,
     startMinutes: kind === 'timed' ? (input.startMinutes ?? 9 * 60) : null,
     durationMinutes: input.durationMinutes ?? 30,
-    recurrence: input.recurrence ?? null,
+    recurrence: inbox ? null : input.recurrence ?? null,
+    exdates: input.exdates ?? [],
+    inbox,
+    dockedFromLoose: false,
+    dockCount: input.dockCount ?? 0,
     completed: input.completed ?? false,
     calendarId: input.calendarId ?? null,
     googleEventId: null,
@@ -34,6 +42,7 @@ export function createTodo(input: {
   };
 }
 
+/** Demo tasks — only used in __DEV__ when the DB is empty. */
 export function seedMockTodos(date: string): Todo[] {
   return [
     createTodo({

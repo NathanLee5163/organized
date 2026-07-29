@@ -15,7 +15,23 @@ type TodoRow = {
   updated_at: string;
   deleted_at: string | null;
   recurrence: string | null;
+  exdates: string | null;
+  inbox: number | null;
+  docked_from_loose: number | null;
+  dock_count: number | null;
 };
+
+function parseExdates(raw: string | null | undefined): string[] {
+  if (!raw) return [];
+  try {
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed)
+      ? parsed.filter((x): x is string => typeof x === 'string')
+      : [];
+  } catch {
+    return [];
+  }
+}
 
 function rowToTodo(row: TodoRow): Todo {
   return {
@@ -26,6 +42,10 @@ function rowToTodo(row: TodoRow): Todo {
     startMinutes: row.start_minutes,
     durationMinutes: row.duration_minutes,
     recurrence: row.recurrence ?? null,
+    exdates: parseExdates(row.exdates),
+    inbox: row.inbox === 1,
+    dockedFromLoose: row.docked_from_loose === 1,
+    dockCount: row.dock_count ?? 0,
     completed: row.completed === 1,
     calendarId: row.calendar_id,
     googleEventId: row.google_event_id,
@@ -39,8 +59,9 @@ export async function upsertTodo(todo: Todo): Promise<void> {
   await db.runAsync(
     `INSERT INTO todos (
       id, title, date, kind, start_minutes, duration_minutes, completed,
-      calendar_id, google_event_id, updated_at, deleted_at, recurrence
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      calendar_id, google_event_id, updated_at, deleted_at, recurrence, exdates, inbox,
+      docked_from_loose, dock_count
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     ON CONFLICT(id) DO UPDATE SET
       title = excluded.title,
       date = excluded.date,
@@ -52,7 +73,11 @@ export async function upsertTodo(todo: Todo): Promise<void> {
       google_event_id = excluded.google_event_id,
       updated_at = excluded.updated_at,
       deleted_at = excluded.deleted_at,
-      recurrence = excluded.recurrence`,
+      recurrence = excluded.recurrence,
+      exdates = excluded.exdates,
+      inbox = excluded.inbox,
+      docked_from_loose = excluded.docked_from_loose,
+      dock_count = excluded.dock_count`,
     [
       todo.id,
       todo.title,
@@ -66,6 +91,10 @@ export async function upsertTodo(todo: Todo): Promise<void> {
       todo.updatedAt,
       todo.deletedAt,
       todo.recurrence,
+      JSON.stringify(todo.exdates ?? []),
+      todo.inbox ? 1 : 0,
+      todo.dockedFromLoose ? 1 : 0,
+      todo.dockCount ?? 0,
     ]
   );
 }
@@ -116,8 +145,9 @@ export async function getTodosForDate(date: string): Promise<Todo[]> {
 
   for (const row of rows) {
     const todo = rowToTodo(row);
+    if (todo.inbox) continue;
     const recurrence = parseRecurrence(todo.recurrence, todo.date);
-    if (!occursOnDate(todo.date, recurrence, date)) continue;
+    if (!occursOnDate(todo.date, recurrence, date, todo.exdates)) continue;
     const view = occurrenceView(todo, date);
     if (seen.has(view.id)) continue;
     seen.add(view.id);
@@ -178,11 +208,11 @@ export async function getTodosBetween(startDate: string, endDate: string): Promi
   const expanded: Todo[] = [];
   for (const row of rows) {
     const todo = rowToTodo(row);
+    if (todo.inbox) continue;
     const recurrence = parseRecurrence(todo.recurrence, todo.date);
-    // Walk each day in range
     let cursor = startDate;
     while (cursor <= endDate) {
-      if (occursOnDate(todo.date, recurrence, cursor)) {
+      if (occursOnDate(todo.date, recurrence, cursor, todo.exdates)) {
         expanded.push(occurrenceView(todo, cursor));
       }
       const d = new Date(
@@ -202,4 +232,31 @@ export async function getTodosBetween(startDate: string, endDate: string): Promi
     if (a.date !== b.date) return a.date.localeCompare(b.date);
     return (a.startMinutes ?? 0) - (b.startMinutes ?? 0);
   });
+}
+
+/** Title search across non-deleted todos (masters; callers can expand if needed). */
+export async function searchTodos(query: string, limit = 40): Promise<Todo[]> {
+  const q = query.trim().toLowerCase();
+  if (!q) return [];
+  const db = await getDb();
+  const rows = await db.getAllAsync<TodoRow>(
+    `SELECT * FROM todos
+     WHERE deleted_at IS NULL
+       AND lower(title) LIKE ?
+     ORDER BY date DESC, start_minutes ASC
+     LIMIT ?`,
+    [`%${q}%`, limit]
+  );
+  return rows.map(rowToTodo);
+}
+
+/** Open-ended Loose list — no day on the runway. */
+export async function getInboxTodos(): Promise<Todo[]> {
+  const db = await getDb();
+  const rows = await db.getAllAsync<TodoRow>(
+    `SELECT * FROM todos
+     WHERE deleted_at IS NULL AND inbox = 1
+     ORDER BY completed ASC, updated_at DESC`
+  );
+  return rows.map(rowToTodo);
 }

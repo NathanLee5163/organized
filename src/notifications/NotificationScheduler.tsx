@@ -2,7 +2,7 @@ import { useEffect } from 'react';
 import { Platform } from 'react-native';
 
 import { ensureDb } from '@/src/db/database';
-import { getTodosBetween } from '@/src/db/todos';
+import { getInboxTodos, getTodosBetween } from '@/src/db/todos';
 import {
   getNotificationPermissionStatus,
   rescheduleNotifications,
@@ -19,7 +19,7 @@ export function NotificationScheduler() {
     reminderLeadMinutes,
     morningBriefingEnabled,
   } = usePreferences();
-  const { todos, dateKey, loading } = useTodos();
+  const { todos, anytime, dateKey, loading } = useTodos();
 
   useEffect(() => {
     if (!ready || loading || Platform.OS === 'web') return;
@@ -34,7 +34,9 @@ export function NotificationScheduler() {
       const end = addDays(start, 14);
       // Prefer a fresh window from DB so reminders cover days beyond the selected date.
       const windowTodos = await getTodosBetween(start, end);
-      const merged = windowTodos.length > 0 ? windowTodos : todos;
+      const inbox = await getInboxTodos();
+      const scheduleTodos = windowTodos.length > 0 ? windowTodos : todos;
+      const merged = [...scheduleTodos, ...inbox];
 
       await rescheduleNotifications(merged, {
         taskRemindersEnabled,
@@ -50,6 +52,7 @@ export function NotificationScheduler() {
     ready,
     loading,
     todos,
+    anytime,
     dateKey,
     taskRemindersEnabled,
     reminderLeadMinutes,

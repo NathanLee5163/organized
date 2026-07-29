@@ -195,13 +195,28 @@ export function todoToGoogleEventBody(todo: Todo): Record<string, unknown> {
   if (todo.recurrence) {
     const isInstance = Boolean(todo.googleEventId && todo.googleEventId.includes('_'));
     if (!isInstance) {
-      base.recurrence = [
+      const lines: string[] = [
         todo.recurrence.startsWith('RRULE:') ? todo.recurrence : `RRULE:${todo.recurrence}`,
       ];
+      const isAllDay = todo.kind === 'anytime' || todo.startMinutes == null;
+      for (const dateKey of todo.exdates ?? []) {
+        if (isAllDay) {
+          lines.push(`EXDATE;VALUE=DATE:${dateKey.replace(/-/g, '')}`);
+        } else {
+          // Timed series need datetime EXDATEs that match the instance start.
+          const local = toLocalDateTimeString(dateKey, todo.startMinutes ?? 0);
+          const compact = local.replace(/[-:]/g, '').slice(0, 15);
+          lines.push(`EXDATE;TZID=${timeZone}:${compact}`);
+        }
+      }
+      base.recurrence = lines;
     }
   }
 
   if (todo.kind === 'anytime' || todo.startMinutes == null) {
+    if (!todo.date || !/^\d{4}-\d{2}-\d{2}$/.test(todo.date)) {
+      throw new Error(`Invalid all-day date for Google sync: ${todo.date}`);
+    }
     return {
       ...base,
       start: { date: todo.date },
@@ -210,7 +225,7 @@ export function todoToGoogleEventBody(todo: Todo): Record<string, unknown> {
   }
 
   const start = toLocalDateTimeString(todo.date, todo.startMinutes);
-  const end = toLocalDateTimeString(todo.date, todo.startMinutes + todo.durationMinutes);
+  const end = toLocalDateTimeString(todo.date, todo.startMinutes + Math.max(todo.durationMinutes, 15));
   return {
     ...base,
     start: { dateTime: start, timeZone },

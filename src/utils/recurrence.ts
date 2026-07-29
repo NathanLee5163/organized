@@ -191,8 +191,10 @@ export function recurrenceLabel(recurrence: Recurrence | null | undefined, dateK
 export function occursOnDate(
   startDateKey: string,
   recurrence: Recurrence | null | undefined,
-  dateKey: string
+  dateKey: string,
+  exdates: string[] = []
 ): boolean {
+  if (exdates.includes(dateKey)) return false;
   if (dateKey < startDateKey) return false;
   const r = recurrence ?? NO_REPEAT;
   if (r.preset === 'none') return dateKey === startDateKey;
@@ -257,10 +259,13 @@ export function occurrenceDateKeys(
   startDateKey: string,
   recurrence: Recurrence | null | undefined,
   fromDateKey: string,
-  toDateKeyInclusive: string
+  toDateKeyInclusive: string,
+  exdates: string[] = []
 ): string[] {
   if (!recurrence || recurrence.preset === 'none') {
-    return startDateKey >= fromDateKey && startDateKey <= toDateKeyInclusive
+    return startDateKey >= fromDateKey &&
+      startDateKey <= toDateKeyInclusive &&
+      !exdates.includes(startDateKey)
       ? [startDateKey]
       : [];
   }
@@ -269,9 +274,39 @@ export function occurrenceDateKeys(
   const end = parseDateKey(toDateKeyInclusive);
   while (cursor <= end) {
     const key = toDateKey(cursor);
-    if (occursOnDate(startDateKey, recurrence, key)) keys.push(key);
+    if (occursOnDate(startDateKey, recurrence, key, exdates)) keys.push(key);
     cursor = new Date(cursor);
     cursor.setDate(cursor.getDate() + 1);
   }
   return keys;
+}
+
+/** YYYY-MM-DD → Google EXDATE;VALUE=DATE compact form. */
+export function dateKeyToExdateValue(dateKey: string): string {
+  return dateKey.replace(/-/g, '');
+}
+
+export function exdateValueToDateKey(value: string): string | null {
+  const compact = value.replace(/[^0-9]/g, '').slice(0, 8);
+  if (compact.length !== 8) return null;
+  return `${compact.slice(0, 4)}-${compact.slice(4, 6)}-${compact.slice(6, 8)}`;
+}
+
+/** Parse EXDATE lines from a Google event recurrence[] array. */
+export function parseExdatesFromGoogleRecurrence(lines: string[] | undefined): string[] {
+  if (!lines?.length) return [];
+  const out: string[] = [];
+  for (const line of lines) {
+    if (!/^EXDATE/i.test(line)) continue;
+    const payload = line.includes(':') ? line.slice(line.indexOf(':') + 1) : '';
+    for (const part of payload.split(',')) {
+      const key = exdateValueToDateKey(part);
+      if (key) out.push(key);
+    }
+  }
+  return Array.from(new Set(out)).sort();
+}
+
+export function addExdate(exdates: string[], dateKey: string): string[] {
+  return Array.from(new Set([...exdates, dateKey])).sort();
 }

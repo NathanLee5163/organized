@@ -44,15 +44,25 @@ export function labelToMinutes(hour24: number, minute: number): number {
 
 export function dateKeyAndMinutesToIso(dateKey: string, minutes: number, timeZone?: string): string {
   const d = parseDateKey(dateKey);
-  d.setHours(Math.floor(minutes / 60), minutes % 60, 0, 0);
+  d.setMinutes(d.getMinutes() + Math.round(minutes));
   return d.toISOString();
 }
 
 /** Local wall-clock ISO without Z, for Google Calendar dateTime + timeZone. */
 export function toLocalDateTimeString(dateKey: string, minutes: number): string {
-  const h = Math.floor(minutes / 60);
-  const m = minutes % 60;
-  return `${dateKey}T${pad2(h)}:${pad2(m)}:00`;
+  let day = dateKey;
+  let total = Math.round(minutes);
+  while (total >= 24 * 60) {
+    day = addDays(day, 1);
+    total -= 24 * 60;
+  }
+  while (total < 0) {
+    day = addDays(day, -1);
+    total += 24 * 60;
+  }
+  const h = Math.floor(total / 60);
+  const m = total % 60;
+  return `${day}T${pad2(h)}:${pad2(m)}:00`;
 }
 
 export function deviceTimeZone(): string {

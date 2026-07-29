@@ -1,4 +1,5 @@
 import { useRouter } from 'expo-router';
+import { useState } from 'react';
 import {
   ActivityIndicator,
   RefreshControl,
@@ -9,36 +10,46 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { Copy } from '@/constants/Brand';
 import { Fonts } from '@/constants/Colors';
 import { CategoryFilterChips } from '@/src/components/CategoryFilterChips';
+import { DockResolveSheet } from '@/src/components/DockResolveSheet';
+import { DockSheet } from '@/src/components/DockSheet';
+import { PressableScale } from '@/src/components/PressableScale';
 import { ScreenBackground } from '@/src/components/ScreenBackground';
 import { BrandMark } from '@/src/components/BrandMark';
+import { SyncStatusBar } from '@/src/components/SyncStatusBar';
 import { TimelineBoard } from '@/src/components/TimelineBoard';
 import { WeekStrip } from '@/src/components/WeekStrip';
 import { useThemeColors } from '@/src/components/useThemeColors';
-import { useAuth } from '@/src/auth/AuthContext';
 import { useTodos } from '@/src/context/TodoContext';
-import { relativeSyncLabel } from '@/src/utils/dates';
+import type { Todo } from '@/src/types/todo';
 import { dayGreeting } from '@/src/utils/dayGreeting';
 
 export default function TodayScreen() {
   const colors = useThemeColors();
   const insets = useSafeAreaInsets();
   const router = useRouter();
-  const { isSignedIn } = useAuth();
   const {
     dateKey,
     setDateKey,
     schedule,
     markedDates,
     loading,
-    syncing,
-    lastSyncAt,
-    error,
     refresh,
     toggleComplete,
   } = useTodos();
+  const [pulling, setPulling] = useState(false);
+  const [resolveTodo, setResolveTodo] = useState<Todo | null>(null);
+  const [rescheduleTodo, setRescheduleTodo] = useState<Todo | null>(null);
+
+  const onToggleTodo = (id: string) => {
+    const todo = schedule.find((t) => t.id === id);
+    if (todo?.dockedFromLoose && !todo.completed) {
+      setResolveTodo(todo);
+      return;
+    }
+    void toggleComplete(id);
+  };
 
   return (
     <ScreenBackground>
@@ -48,27 +59,35 @@ export default function TodayScreen() {
           { paddingTop: insets.top + 8, paddingBottom: insets.bottom + 110 },
         ]}
         refreshControl={
-          <RefreshControl refreshing={syncing} onRefresh={refresh} tintColor={colors.tint} />
+          <RefreshControl
+            refreshing={pulling}
+            onRefresh={() => {
+              setPulling(true);
+              void refresh().finally(() => setPulling(false));
+            }}
+            tintColor={colors.tint}
+          />
         }
         showsVerticalScrollIndicator={false}>
         <View>
-          <View style={styles.brand}>
-            <BrandMark subtitle={dayGreeting(dateKey)} />
+          <View style={styles.brandRow}>
+            <View style={{ flex: 1 }}>
+              <BrandMark subtitle={dayGreeting(dateKey)} />
+            </View>
+            <PressableScale
+              onPress={() => router.push({ pathname: '/search' })}
+              style={[styles.searchBtn, { borderColor: colors.hairline, backgroundColor: colors.bubble }]}>
+              <Text style={[styles.searchLabel, { color: colors.text }]}>Search</Text>
+            </PressableScale>
           </View>
           <WeekStrip
             selectedDate={dateKey}
             onSelectDate={setDateKey}
             markedDates={markedDates}
           />
-          <Text style={[styles.sync, { color: colors.textSecondary }]}>
-            {isSignedIn ? relativeSyncLabel(lastSyncAt) : Copy.syncLocal}
-          </Text>
+          <SyncStatusBar />
           <CategoryFilterChips />
         </View>
-
-        {error ? (
-          <Text style={[styles.error, { color: colors.danger }]}>{error}</Text>
-        ) : null}
 
         {loading && schedule.length === 0 ? (
           <ActivityIndicator color={colors.tint} style={{ marginTop: 40 }} />
@@ -76,13 +95,34 @@ export default function TodayScreen() {
           <TimelineBoard
             todos={schedule}
             onPressTodo={(todo) =>
-              router.push({ pathname: '/edit', params: { id: todo.id } })
+              router.push({
+                pathname: '/edit',
+                params: { id: todo.id, date: dateKey },
+              })
             }
-            onToggleTodo={toggleComplete}
+            onToggleTodo={onToggleTodo}
             onAdd={() => router.push({ pathname: '/edit', params: { date: dateKey } })}
           />
         )}
       </ScrollView>
+
+      <DockResolveSheet
+        todo={resolveTodo}
+        visible={Boolean(resolveTodo)}
+        onClose={() => setResolveTodo(null)}
+        onReturnedToLoose={() => router.push('/anytime')}
+        onReschedule={(todo) => {
+          setResolveTodo(null);
+          setRescheduleTodo(todo);
+        }}
+      />
+      <DockSheet
+        todo={rescheduleTodo}
+        visible={Boolean(rescheduleTodo)}
+        mode="reschedule"
+        onClose={() => setRescheduleTodo(null)}
+        onDocked={(date) => setDateKey(date)}
+      />
     </ScreenBackground>
   );
 }
@@ -91,18 +131,21 @@ const styles = StyleSheet.create({
   content: {
     paddingHorizontal: 18,
   },
-  brand: {
+  brandRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 10,
     marginBottom: 12,
   },
-  sync: {
-    fontFamily: Fonts.body,
-    fontSize: 12,
-    marginBottom: 14,
-    marginTop: 10,
+  searchBtn: {
+    marginTop: 6,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderRadius: 999,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
   },
-  error: {
-    fontFamily: Fonts.body,
+  searchLabel: {
+    fontFamily: Fonts.bodyMedium,
     fontSize: 13,
-    marginBottom: 10,
   },
 });
