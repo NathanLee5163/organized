@@ -38,6 +38,28 @@ export async function getDb(): Promise<SQLite.SQLiteDatabase> {
           key TEXT PRIMARY KEY NOT NULL,
           value TEXT NOT NULL
         );
+        CREATE TABLE IF NOT EXISTS goals (
+          id TEXT PRIMARY KEY NOT NULL,
+          title TEXT NOT NULL,
+          notes TEXT,
+          status TEXT NOT NULL DEFAULT 'active',
+          block_count INTEGER NOT NULL DEFAULT 0,
+          created_at TEXT NOT NULL,
+          updated_at TEXT NOT NULL,
+          deleted_at TEXT
+        );
+        CREATE TABLE IF NOT EXISTS goal_activities (
+          id TEXT PRIMARY KEY NOT NULL,
+          goal_id TEXT NOT NULL,
+          date TEXT NOT NULL,
+          start_minutes INTEGER NOT NULL,
+          end_minutes INTEGER NOT NULL,
+          duration_minutes INTEGER NOT NULL,
+          note TEXT,
+          todo_id TEXT,
+          created_at TEXT NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_goal_activities_goal ON goal_activities(goal_id);
       `);
       // Migrations for existing installs
       try {
@@ -71,6 +93,11 @@ export async function getDb(): Promise<SQLite.SQLiteDatabase> {
       } catch {
         // column already exists
       }
+      try {
+        await db.execAsync('ALTER TABLE todos ADD COLUMN goal_id TEXT');
+      } catch {
+        // column already exists
+      }
       // Existing anytime tasks become open-ended Loose items.
       try {
         await db.execAsync(
@@ -78,6 +105,35 @@ export async function getDb(): Promise<SQLite.SQLiteDatabase> {
            WHERE kind = 'anytime' AND (inbox IS NULL OR inbox = 0)
              AND (google_event_id IS NULL OR google_event_id = '')`
         );
+      } catch {
+        // ignore
+      }
+      // Ensure goals tables exist on older installs that already had the DB file.
+      try {
+        await db.execAsync(`
+          CREATE TABLE IF NOT EXISTS goals (
+            id TEXT PRIMARY KEY NOT NULL,
+            title TEXT NOT NULL,
+            notes TEXT,
+            status TEXT NOT NULL DEFAULT 'active',
+            block_count INTEGER NOT NULL DEFAULT 0,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            deleted_at TEXT
+          );
+          CREATE TABLE IF NOT EXISTS goal_activities (
+            id TEXT PRIMARY KEY NOT NULL,
+            goal_id TEXT NOT NULL,
+            date TEXT NOT NULL,
+            start_minutes INTEGER NOT NULL,
+            end_minutes INTEGER NOT NULL,
+            duration_minutes INTEGER NOT NULL,
+            note TEXT,
+            todo_id TEXT,
+            created_at TEXT NOT NULL
+          );
+          CREATE INDEX IF NOT EXISTS idx_goal_activities_goal ON goal_activities(goal_id);
+        `);
       } catch {
         // ignore
       }

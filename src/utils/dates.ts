@@ -108,26 +108,40 @@ export type CalendarCell = {
 };
 
 /** Sunday-start month grid (6 weeks). */
-export function buildMonthGrid(monthKey: string): CalendarCell[] {
+export function buildMonthGrid(
+  monthKey: string,
+  opts?: { adjacent?: boolean }
+): CalendarCell[] {
   const first = parseDateKey(startOfMonth(monthKey));
   const year = first.getFullYear();
   const month = first.getMonth();
   const daysInMonth = new Date(year, month + 1, 0).getDate();
   const startWeekday = first.getDay(); // 0 Sun
+  const adjacent = opts?.adjacent ?? false;
 
   const cells: CalendarCell[] = [];
   for (let i = 0; i < startWeekday; i++) {
-    cells.push({ dateKey: null, day: null, inMonth: false });
+    if (adjacent) {
+      const d = new Date(year, month, 1 - (startWeekday - i));
+      cells.push({ dateKey: toDateKey(d), day: d.getDate(), inMonth: false });
+    } else {
+      cells.push({ dateKey: null, day: null, inMonth: false });
+    }
   }
   for (let day = 1; day <= daysInMonth; day++) {
     const dateKey = `${year}-${pad2(month + 1)}-${pad2(day)}`;
     cells.push({ dateKey, day, inMonth: true });
   }
-  while (cells.length % 7 !== 0) {
-    cells.push({ dateKey: null, day: null, inMonth: false });
-  }
-  while (cells.length < 42) {
-    cells.push({ dateKey: null, day: null, inMonth: false });
+  let trailing = 0;
+  while (cells.length % 7 !== 0 || cells.length < 42) {
+    trailing += 1;
+    if (adjacent) {
+      const d = new Date(year, month + 1, trailing);
+      cells.push({ dateKey: toDateKey(d), day: d.getDate(), inMonth: false });
+    } else {
+      cells.push({ dateKey: null, day: null, inMonth: false });
+    }
+    if (cells.length >= 42) break;
   }
   return cells;
 }

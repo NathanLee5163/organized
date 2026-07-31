@@ -11,12 +11,12 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Fonts } from '@/constants/Colors';
-import { CategoryFilterChips } from '@/src/components/CategoryFilterChips';
+import { BrandMark } from '@/src/components/BrandMark';
+import { CategoryFilterButton } from '@/src/components/CategoryFilterButton';
 import { DockResolveSheet } from '@/src/components/DockResolveSheet';
 import { DockSheet } from '@/src/components/DockSheet';
 import { PressableScale } from '@/src/components/PressableScale';
 import { ScreenBackground } from '@/src/components/ScreenBackground';
-import { BrandMark } from '@/src/components/BrandMark';
 import { SyncStatusBar } from '@/src/components/SyncStatusBar';
 import { TimelineBoard } from '@/src/components/TimelineBoard';
 import { WeekStrip } from '@/src/components/WeekStrip';
@@ -44,7 +44,7 @@ export default function TodayScreen() {
 
   const onToggleTodo = (id: string) => {
     const todo = schedule.find((t) => t.id === id);
-    if (todo?.dockedFromLoose && !todo.completed) {
+    if ((todo?.dockedFromLoose || todo?.goalId) && !todo.completed) {
       setResolveTodo(todo);
       return;
     }
@@ -74,11 +74,17 @@ export default function TodayScreen() {
             <View style={{ flex: 1 }}>
               <BrandMark subtitle={dayGreeting(dateKey)} />
             </View>
-            <PressableScale
-              onPress={() => router.push({ pathname: '/search' })}
-              style={[styles.searchBtn, { borderColor: colors.hairline, backgroundColor: colors.bubble }]}>
-              <Text style={[styles.searchLabel, { color: colors.text }]}>Search</Text>
-            </PressableScale>
+            <View style={styles.headerActions}>
+              <CategoryFilterButton />
+              <PressableScale
+                onPress={() => router.push({ pathname: '/search' })}
+                style={[
+                  styles.searchBtn,
+                  { borderColor: colors.hairline, backgroundColor: colors.bubble },
+                ]}>
+                <Text style={[styles.searchLabel, { color: colors.text }]}>Search</Text>
+              </PressableScale>
+            </View>
           </View>
           <WeekStrip
             selectedDate={dateKey}
@@ -86,7 +92,6 @@ export default function TodayScreen() {
             markedDates={markedDates}
           />
           <SyncStatusBar />
-          <CategoryFilterChips />
         </View>
 
         {loading && schedule.length === 0 ? (
@@ -111,6 +116,7 @@ export default function TodayScreen() {
         visible={Boolean(resolveTodo)}
         onClose={() => setResolveTodo(null)}
         onReturnedToLoose={() => router.push('/anytime')}
+        onReturnedToGoals={() => router.push('/anytime')}
         onReschedule={(todo) => {
           setResolveTodo(null);
           setRescheduleTodo(todo);
@@ -136,6 +142,12 @@ const styles = StyleSheet.create({
     alignItems: 'flex-start',
     gap: 10,
     marginBottom: 12,
+  },
+  headerActions: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 8,
+    flexShrink: 0,
   },
   searchBtn: {
     marginTop: 6,

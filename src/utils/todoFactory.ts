@@ -18,6 +18,7 @@ export function createTodo(input: {
   inbox?: boolean;
   calendarId?: string | null;
   dockCount?: number;
+  goalId?: string | null;
 }): Todo {
   const kind = input.kind ?? (input.startMinutes != null ? 'timed' : 'anytime');
   const now = new Date().toISOString();
@@ -34,6 +35,7 @@ export function createTodo(input: {
     inbox,
     dockedFromLoose: false,
     dockCount: input.dockCount ?? 0,
+    goalId: input.goalId ?? null,
     completed: input.completed ?? false,
     calendarId: input.calendarId ?? null,
     googleEventId: null,

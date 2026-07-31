@@ -1,9 +1,7 @@
 import { LinearGradient } from 'expo-linear-gradient';
 import { SymbolView } from 'expo-symbols';
 import { useRouter } from 'expo-router';
-import { useEffect } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
-import Animated, { useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { useThemeColors } from '@/src/components/useThemeColors';
@@ -46,7 +44,7 @@ function TabIcon({ routeName, focused }: { routeName: string; focused: boolean }
     routeName === 'calendar'
       ? ({ ios: 'calendar', android: 'calendar_month', web: 'calendar_month' } as const)
       : routeName === 'anytime'
-        ? ({ ios: 'tray.full', android: 'inbox', web: 'inbox' } as const)
+        ? ({ ios: 'flag.fill', android: 'flag', web: 'flag' } as const)
         : routeName === 'settings'
           ? ({ ios: 'gearshape', android: 'settings', web: 'settings' } as const)
           : ({
@@ -55,20 +53,17 @@ function TabIcon({ routeName, focused }: { routeName: string; focused: boolean }
               web: 'view_agenda',
             } as const);
 
-  const focus = useSharedValue(focused ? 1 : 0);
-  useEffect(() => {
-    focus.value = withTiming(focused ? 1 : 0, { duration: 160 });
-  }, [focus, focused]);
-
-  const pillStyle = useAnimatedStyle(() => ({
-    opacity: focus.value,
-    transform: [{ scale: 0.85 + focus.value * 0.15 }],
-  }));
-
   return (
     <View style={styles.iconWrap}>
-      <Animated.View
-        style={[styles.activePill, { backgroundColor: colors.muted }, pillStyle]}
+      <View
+        style={[
+          styles.activePill,
+          {
+            backgroundColor: colors.muted,
+            opacity: focused ? 1 : 0,
+            transform: [{ scale: focused ? 1 : 0.85 }],
+          },
+        ]}
       />
       <SymbolView
         name={iconName}
@@ -125,7 +120,7 @@ export function FloatingTabBar({ state, descriptors, navigation }: Props) {
           onPress={() =>
             router.push(
               focusedRoute === 'anytime'
-                ? { pathname: '/edit', params: { kind: 'anytime', inbox: '1' } }
+                ? { pathname: '/(tabs)/anytime', params: { new: '1' } }
                 : { pathname: '/edit', params: { date: dateKey } }
             )
           }
@@ -139,7 +134,7 @@ export function FloatingTabBar({ state, descriptors, navigation }: Props) {
             <SymbolView
               name={{ ios: 'plus', android: 'add', web: 'add' }}
               tintColor={colors.onTint}
-              size={26}
+              size={22}
             />
           </LinearGradient>
         </PressableScale>
@@ -154,26 +149,26 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     bottom: 0,
-    paddingHorizontal: 14,
+    paddingHorizontal: 18,
   },
   bar: {
-    height: 68,
-    borderRadius: 24,
-    borderWidth: StyleSheet.hairlineWidth,
     flexDirection: 'row',
     alignItems: 'center',
-    paddingLeft: 6,
-    paddingRight: 6,
+    borderRadius: 28,
+    borderWidth: StyleSheet.hairlineWidth,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    gap: 2,
   },
   item: {
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    height: '100%',
+    height: 44,
   },
   iconWrap: {
     width: 44,
-    height: 44,
+    height: 36,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -182,12 +177,12 @@ const styles = StyleSheet.create({
     borderRadius: 14,
   },
   fabOuter: {
-    marginLeft: 2,
+    marginLeft: 4,
   },
   fab: {
-    width: 54,
-    height: 54,
-    borderRadius: 18,
+    width: 46,
+    height: 46,
+    borderRadius: 23,
     alignItems: 'center',
     justifyContent: 'center',
   },

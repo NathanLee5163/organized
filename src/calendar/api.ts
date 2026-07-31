@@ -188,6 +188,7 @@ export function todoToGoogleEventBody(todo: Todo): Record<string, unknown> {
         todoKind: todo.kind,
         todoCompleted: todo.completed ? '1' : '0',
         todoRecurrence: todo.recurrence ?? '',
+        todoGoalId: todo.goalId ?? '',
       },
     },
   };

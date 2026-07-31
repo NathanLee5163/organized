@@ -62,6 +62,7 @@ export function googleEventToTodo(
       inbox: false,
       dockedFromLoose: existing?.dockedFromLoose ?? false,
       dockCount: existing?.dockCount ?? 0,
+      goalId: existing?.goalId ?? event.extendedProperties?.private?.todoGoalId ?? null,
       completed,
       calendarId,
       googleEventId: event.id,
@@ -93,6 +94,7 @@ export function googleEventToTodo(
     inbox: false,
     dockedFromLoose: existing?.dockedFromLoose ?? false,
     dockCount: existing?.dockCount ?? 0,
+    goalId: existing?.goalId ?? event.extendedProperties?.private?.todoGoalId ?? null,
     completed,
     calendarId,
     googleEventId: event.id,
@@ -111,6 +113,7 @@ export function preferNewer(local: Todo, remote: Todo): Todo {
       id: local.id,
       dockedFromLoose: local.dockedFromLoose || remote.dockedFromLoose,
       dockCount: Math.max(local.dockCount ?? 0, remote.dockCount ?? 0),
+      goalId: local.goalId ?? remote.goalId,
     };
   }
   return {
@@ -121,6 +124,7 @@ export function preferNewer(local: Todo, remote: Todo): Todo {
     inbox: local.inbox || remote.inbox,
     dockedFromLoose: local.dockedFromLoose || remote.dockedFromLoose,
     dockCount: Math.max(local.dockCount ?? 0, remote.dockCount ?? 0),
+    goalId: local.goalId ?? remote.goalId,
     exdates:
       (remote.exdates?.length ?? 0) >= (local.exdates?.length ?? 0)
         ? remote.exdates ?? local.exdates

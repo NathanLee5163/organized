@@ -5,18 +5,18 @@ export const Brand = {
   tabs: {
     today: 'Runway',
     calendar: 'Month',
-    anytime: 'Loose',
+    anytime: 'Goals',
     settings: 'Deck',
   },
 } as const;
 
 export const Copy = {
   emptyRunway: 'Nothing on the runway',
-  emptyRunwayHint: 'Dock a timed task — we’ll mirror it to Google Calendar when you’re connected.',
+  emptyRunwayHint: 'Dock a timed task — or reserve a Goals block on the runway.',
   dockTask: 'Dock a task',
-  dockAnytime: 'Add a loose end',
+  dockAnytime: 'Add a goal',
   syncLocal: 'On-device · hook up Google in Deck',
-  anytimeLead: 'Open list · tap Dock to land something on the runway.',
+  anytimeLead: 'Ambitious aims · block runway time, Finished logs the work.',
   settingsLead: 'Manage account, sync, and preferences.',
   editTitle: 'Dock this',
   themeSection: 'Appearance',

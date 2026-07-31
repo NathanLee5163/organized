@@ -36,30 +36,6 @@ export type SyncResult = {
   lastSyncAt: string;
 };
 
-function remoteStillHasLocal(
-  local: Todo,
-  remoteEventIds: Set<string>,
-  remoteRecurringMasters: Set<string>
-): boolean {
-  const eventId = local.googleEventId;
-  if (!eventId) return true;
-
-  if (remoteEventIds.has(eventId)) return true;
-  if (remoteRecurringMasters.has(eventId)) return true;
-
-  // Expanded instance ids look like `${masterId}_YYYYMMDD…`
-  for (const remoteId of remoteEventIds) {
-    if (remoteId.startsWith(`${eventId}_`)) return true;
-  }
-  // Local might be an instance; master still exists remotely.
-  const master = eventId.includes('_') ? eventId.split('_')[0] : null;
-  if (master && (remoteEventIds.has(master) || remoteRecurringMasters.has(master))) {
-    return true;
-  }
-
-  return false;
-}
-
 async function resolveReadCalendarIds(
   accessToken: string,
   writeCalendarId: string
@@ -172,9 +148,6 @@ export async function syncDay(accessToken: string, dateKey: string): Promise<Syn
 
   const uniqueCalendars = Array.from(new Set(readIds));
   const remoteByEventId = new Map<string, Todo>();
-  const remoteEventIds = new Set<string>();
-  const remoteRecurringMasters = new Set<string>();
-  const fetchedCalendars = new Set<string>();
   const pendingDeleteIds = new Set(
     (await listQueue()).filter((item) => item.op === 'delete').map((item) => item.todoId)
   );
@@ -182,11 +155,7 @@ export async function syncDay(accessToken: string, dateKey: string): Promise<Syn
   for (const calendarId of uniqueCalendars) {
     try {
       const events = await listEvents(accessToken, calendarId, dateKey);
-      fetchedCalendars.add(calendarId);
       for (const event of events) {
-        if (event.id) remoteEventIds.add(event.id);
-        if (event.recurringEventId) remoteRecurringMasters.add(event.recurringEventId);
-
         if (event.status === 'cancelled') {
           const existing =
             (await getTodoByGoogleEventId(event.id)) ??
@@ -248,17 +217,8 @@ export async function syncDay(accessToken: string, dateKey: string): Promise<Syn
     }
   }
 
-  // Google deleted (or moved off this day): drop linked local copies.
-  // Only when we successfully read at least one calendar — otherwise keep local.
-  if (fetchedCalendars.size > 0) {
-    for (const todo of local) {
-      if (!todo.googleEventId || pendingDeleteIds.has(todo.id)) continue;
-      // Don't assume deleted if we never successfully read that calendar this pass.
-      if (todo.calendarId && !fetchedCalendars.has(todo.calendarId)) continue;
-      if (remoteStillHasLocal(todo, remoteEventIds, remoteRecurringMasters)) continue;
-      await hardDeleteTodo(todo.id);
-    }
-  }
+  // Explicit cancellations are handled above. Do NOT delete locals merely because
+  // they were missing from this fetch — partial API results were wiping half the day.
 
   // Push unlinked local items created offline.
   for (const todo of localUnlinked) {

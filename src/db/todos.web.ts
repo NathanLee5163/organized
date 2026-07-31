@@ -1,6 +1,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import type { Todo } from '@/src/types/todo';
 import { occursOnDate, parseRecurrence } from '@/src/utils/recurrence';
+import { addDays } from '@/src/utils/dates';
 
 const TODOS_KEY = 'web_todos_v1';
 
@@ -16,6 +17,7 @@ async function readTodos(): Promise<Todo[]> {
       inbox: t.inbox ?? t.kind === 'anytime',
       dockedFromLoose: t.dockedFromLoose ?? false,
       dockCount: t.dockCount ?? 0,
+      goalId: t.goalId ?? null,
     }));
   } catch {
     return [];
@@ -109,22 +111,19 @@ export async function getTodosBetween(startDate: string, endDate: string): Promi
   const todos = (await readTodos()).filter((t) => !t.deletedAt && !t.inbox);
   const expanded: Todo[] = [];
   for (const todo of todos) {
+    if (!todo.recurrence) {
+      if (todo.date >= startDate && todo.date <= endDate) {
+        expanded.push(todo);
+      }
+      continue;
+    }
     const recurrence = parseRecurrence(todo.recurrence, todo.date);
     let cursor = startDate;
     while (cursor <= endDate) {
       if (occursOnDate(todo.date, recurrence, cursor, todo.exdates ?? [])) {
         expanded.push(occurrenceView(todo, cursor));
       }
-      const d = new Date(
-        Number(cursor.slice(0, 4)),
-        Number(cursor.slice(5, 7)) - 1,
-        Number(cursor.slice(8, 10))
-      );
-      d.setDate(d.getDate() + 1);
-      const y = d.getFullYear();
-      const m = `${d.getMonth() + 1}`.padStart(2, '0');
-      const day = `${d.getDate()}`.padStart(2, '0');
-      cursor = `${y}-${m}-${day}`;
+      cursor = addDays(cursor, 1);
     }
   }
   return expanded.sort((a, b) => {
@@ -149,5 +148,21 @@ export async function getInboxTodos(): Promise<Todo[]> {
     .sort((a, b) => {
       if (a.completed !== b.completed) return a.completed ? 1 : -1;
       return b.updatedAt.localeCompare(a.updatedAt);
+    });
+}
+
+/** Incomplete runway blocks tied to a Goal. */
+export async function getOpenGoalBlocks(): Promise<Todo[]> {
+  return (await readTodos())
+    .filter(
+      (t) =>
+        !t.deletedAt &&
+        !t.inbox &&
+        !t.completed &&
+        Boolean(t.goalId)
+    )
+    .sort((a, b) => {
+      if (a.date !== b.date) return a.date.localeCompare(b.date);
+      return (a.startMinutes ?? 0) - (b.startMinutes ?? 0);
     });
 }

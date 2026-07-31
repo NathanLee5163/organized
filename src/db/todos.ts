@@ -1,5 +1,6 @@
 import type { Todo, TodoKind } from '@/src/types/todo';
 import { getDb } from '@/src/db/database';
+import { addDays } from '@/src/utils/dates';
 import { occursOnDate, parseRecurrence } from '@/src/utils/recurrence';
 
 type TodoRow = {
@@ -19,6 +20,7 @@ type TodoRow = {
   inbox: number | null;
   docked_from_loose: number | null;
   dock_count: number | null;
+  goal_id: string | null;
 };
 
 function parseExdates(raw: string | null | undefined): string[] {
@@ -46,6 +48,7 @@ function rowToTodo(row: TodoRow): Todo {
     inbox: row.inbox === 1,
     dockedFromLoose: row.docked_from_loose === 1,
     dockCount: row.dock_count ?? 0,
+    goalId: row.goal_id ?? null,
     completed: row.completed === 1,
     calendarId: row.calendar_id,
     googleEventId: row.google_event_id,
@@ -60,8 +63,8 @@ export async function upsertTodo(todo: Todo): Promise<void> {
     `INSERT INTO todos (
       id, title, date, kind, start_minutes, duration_minutes, completed,
       calendar_id, google_event_id, updated_at, deleted_at, recurrence, exdates, inbox,
-      docked_from_loose, dock_count
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      docked_from_loose, dock_count, goal_id
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     ON CONFLICT(id) DO UPDATE SET
       title = excluded.title,
       date = excluded.date,
@@ -77,7 +80,8 @@ export async function upsertTodo(todo: Todo): Promise<void> {
       exdates = excluded.exdates,
       inbox = excluded.inbox,
       docked_from_loose = excluded.docked_from_loose,
-      dock_count = excluded.dock_count`,
+      dock_count = excluded.dock_count,
+      goal_id = excluded.goal_id`,
     [
       todo.id,
       todo.title,
@@ -95,6 +99,7 @@ export async function upsertTodo(todo: Todo): Promise<void> {
       todo.inbox ? 1 : 0,
       todo.dockedFromLoose ? 1 : 0,
       todo.dockCount ?? 0,
+      todo.goalId ?? null,
     ]
   );
 }
@@ -209,22 +214,22 @@ export async function getTodosBetween(startDate: string, endDate: string): Promi
   for (const row of rows) {
     const todo = rowToTodo(row);
     if (todo.inbox) continue;
+
+    // One-off: O(1) — don’t walk every day in the month.
+    if (!todo.recurrence) {
+      if (todo.date >= startDate && todo.date <= endDate) {
+        expanded.push(todo);
+      }
+      continue;
+    }
+
     const recurrence = parseRecurrence(todo.recurrence, todo.date);
     let cursor = startDate;
     while (cursor <= endDate) {
       if (occursOnDate(todo.date, recurrence, cursor, todo.exdates)) {
         expanded.push(occurrenceView(todo, cursor));
       }
-      const d = new Date(
-        Number(cursor.slice(0, 4)),
-        Number(cursor.slice(5, 7)) - 1,
-        Number(cursor.slice(8, 10))
-      );
-      d.setDate(d.getDate() + 1);
-      const y = d.getFullYear();
-      const m = `${d.getMonth() + 1}`.padStart(2, '0');
-      const day = `${d.getDate()}`.padStart(2, '0');
-      cursor = `${y}-${m}-${day}`;
+      cursor = addDays(cursor, 1);
     }
   }
 
@@ -257,6 +262,21 @@ export async function getInboxTodos(): Promise<Todo[]> {
     `SELECT * FROM todos
      WHERE deleted_at IS NULL AND inbox = 1
      ORDER BY completed ASC, updated_at DESC`
+  );
+  return rows.map(rowToTodo);
+}
+
+/** Incomplete runway blocks tied to a Goal (at most one “in progress” per goal). */
+export async function getOpenGoalBlocks(): Promise<Todo[]> {
+  const db = await getDb();
+  const rows = await db.getAllAsync<TodoRow>(
+    `SELECT * FROM todos
+     WHERE deleted_at IS NULL
+       AND inbox = 0
+       AND completed = 0
+       AND goal_id IS NOT NULL
+       AND goal_id != ''
+     ORDER BY date ASC, start_minutes ASC`
   );
   return rows.map(rowToTodo);
 }

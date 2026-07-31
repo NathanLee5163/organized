@@ -30,14 +30,44 @@ import { findRunwayGaps, type RunwayGap } from '@/src/utils/runwayGaps';
 import { createTodo, seedMockTodos } from '@/src/utils/todoFactory';
 import { soundComplete } from '@/src/utils/sounds';
 
+function sameTodosByDate(
+  a: Record<string, Todo[]>,
+  b: Record<string, Todo[]>
+): boolean {
+  const aKeys = Object.keys(a);
+  const bKeys = Object.keys(b);
+  if (aKeys.length !== bKeys.length) return false;
+  for (const k of aKeys) {
+    const left = a[k] ?? [];
+    const right = b[k] ?? [];
+    if (left.length !== right.length) return false;
+    for (let i = 0; i < left.length; i++) {
+      const x = left[i]!;
+      const y = right[i]!;
+      if (
+        x.id !== y.id ||
+        x.updatedAt !== y.updatedAt ||
+        x.completed !== y.completed ||
+        x.title !== y.title ||
+        x.startMinutes !== y.startMinutes
+      ) {
+        return false;
+      }
+    }
+  }
+  return true;
+}
+
 type TodoContextValue = {
   dateKey: string;
-  setDateKey: (key: string) => void;
+  setDateKey: (key: string, opts?: { seed?: Todo[] }) => void;
   todos: Todo[];
   schedule: Todo[];
   /** Open-ended Loose list (not tied to a day). */
   anytime: Todo[];
   markedDates: Record<string, number>;
+  /** Timed (non-inbox) todos on the visible month, keyed by date. */
+  monthTodosByDate: Record<string, Todo[]>;
   loading: boolean;
   syncing: boolean;
   lastSyncAt: string | null;
@@ -104,14 +134,32 @@ export function TodoProvider({ children }: { children: React.ReactNode }) {
   const [dateKey, setDateKeyState] = useState(toDateKey(new Date()));
   const [todos, setTodos] = useState<Todo[]>([]);
   const [inbox, setInbox] = useState<Todo[]>([]);
-  const [markedDates, setMarkedDates] = useState<Record<string, number>>({});
+  const [monthTodosByDate, setMonthTodosByDate] = useState<Record<string, Todo[]>>({});
   const [loading, setLoading] = useState(true);
   const [syncing, setSyncing] = useState(false);
   const [lastSyncAt, setLastSyncAt] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
+  // Derived so toggling categories can’t race an async “full then filtered” paint.
+  const markedDates = useMemo(() => {
+    const counts: Record<string, number> = {};
+    for (const [date, list] of Object.entries(monthTodosByDate)) {
+      let n = 0;
+      for (const t of list) {
+        if (t.completed) continue;
+        if (!isCategoryEnabled(t.calendarId)) continue;
+        n += 1;
+      }
+      if (n > 0) counts[date] = n;
+    }
+    return counts;
+  }, [monthTodosByDate, isCategoryEnabled, readIds]);
+
   const dateKeyRef = useRef(dateKey);
   dateKeyRef.current = dateKey;
+  const dayLoadGen = useRef(0);
+  /** When set, loadLocal won’t shrink the seeded day list for this date. */
+  const stickySeedDate = useRef<string | null>(null);
 
   const backgroundTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const backgroundChain = useRef(Promise.resolve());
@@ -120,12 +168,25 @@ export function TodoProvider({ children }: { children: React.ReactNode }) {
   const monthSyncInFlight = useRef<string | null>(null);
   const syncedMonths = useRef(new Set<string>());
 
-  const loadLocal = useCallback(async (key: string) => {
+  const loadLocal = useCallback(async (key: string, gen?: number) => {
     await ensureDb();
     const rows = await getTodosForDate(key);
-    if (key === dateKeyRef.current) {
-      setTodos(rows);
-    }
+    if (key !== dateKeyRef.current) return rows;
+    if (gen != null && gen !== dayLoadGen.current) return rows;
+    setTodos((prev) => {
+      // Protect month-chip seed from a thinner SQLite read on the same day.
+      if (
+        stickySeedDate.current === key &&
+        prev.length > 0 &&
+        rows.length < prev.length
+      ) {
+        const byId = new Map(prev.map((t) => [t.id, t]));
+        for (const t of rows) byId.set(t.id, t);
+        return Array.from(byId.values());
+      }
+      stickySeedDate.current = null;
+      return rows;
+    });
     return rows;
   }, []);
 
@@ -137,30 +198,45 @@ export function TodoProvider({ children }: { children: React.ReactNode }) {
   const refreshMonthMarks = useCallback(async (monthKey?: string) => {
     await ensureDb();
     const start = startOfMonth(monthKey ?? dateKeyRef.current);
-    const endDate = addDays(addMonths(start, 1), -1);
-    const rows = await getTodosBetween(start, endDate);
-    const counts: Record<string, number> = {};
+    // Include adjacent-week spill so the full month grid can show chips.
+    const rangeStart = addDays(start, -7);
+    const rangeEnd = addDays(addMonths(start, 1), 6);
+    const rows = await getTodosBetween(rangeStart, rangeEnd);
+    // Store unfiltered — category visibility is applied at render time so we
+    // never paint “everything” then async-drop half the chips.
+    const byDate: Record<string, Todo[]> = {};
     for (const row of rows) {
-      if (!isCategoryEnabledRef.current(row.calendarId)) continue;
-      counts[row.date] = (counts[row.date] ?? 0) + 1;
+      if (!byDate[row.date]) byDate[row.date] = [];
+      byDate[row.date]!.push(row);
     }
-    setMarkedDates(counts);
-  }, []);
 
+    // MERGE into the existing map. Neighbor-month prefetch used to replace the
+    // whole object with only that month’s range — visible chips vanished.
+    setMonthTodosByDate((prev) => {
+      const next: Record<string, Todo[]> = { ...prev };
+      for (const key of Object.keys(next)) {
+        if (key >= rangeStart && key <= rangeEnd) delete next[key];
+      }
+      Object.assign(next, byDate);
+      return sameTodosByDate(prev, next) ? prev : next;
+    });
+  }, []);
   const syncDayNow = useCallback(
     async (key: string, opts?: { showSpinner?: boolean }) => {
       if (!isSignedIn) return;
       const showSpinner = opts?.showSpinner ?? false;
+      const gen = dayLoadGen.current;
       try {
         if (showSpinner) setSyncing(true);
         const token = await getValidAccessToken();
         if (!token) return;
         const result = await syncDay(token, key);
-        if (key === dateKeyRef.current) {
-          setTodos(result.todos);
-        }
+        if (key !== dateKeyRef.current || gen !== dayLoadGen.current) return;
+        stickySeedDate.current = null;
+        setTodos(result.todos);
         setLastSyncAt(result.lastSyncAt);
-        await refreshMonthMarks(dateKeyRef.current);
+        // Don't rebuild the whole month grid after every day sync — that flicker
+        // made chips appear then vanish. Month marks refresh on month sync / edits.
       } catch (e) {
         const message = e instanceof Error ? e.message : 'Sync failed';
         setError(message);
@@ -168,7 +244,7 @@ export function TodoProvider({ children }: { children: React.ReactNode }) {
         if (showSpinner) setSyncing(false);
       }
     },
-    [getValidAccessToken, isSignedIn, refreshMonthMarks]
+    [getValidAccessToken, isSignedIn]
   );
 
   const syncDayNowRef = useRef(syncDayNow);
@@ -176,35 +252,28 @@ export function TodoProvider({ children }: { children: React.ReactNode }) {
 
   const ensureMonthSynced = useCallback(
     async (monthKey: string, opts?: { force?: boolean }) => {
-      if (!isSignedIn) {
-        await refreshMonthMarks(monthKey);
-        return;
-      }
       const key = startOfMonth(monthKey);
-      if (!opts?.force && syncedMonths.current.has(key)) {
-        await refreshMonthMarks(key);
-        return;
-      }
+
+      // Paint from SQLite immediately — never wait on Google for the grid.
+      await refreshMonthMarks(key);
+
+      if (!isSignedIn) return;
+      if (!opts?.force && syncedMonths.current.has(key)) return;
       if (monthSyncInFlight.current === key) return;
       monthSyncInFlight.current = key;
       try {
         const token = await getValidAccessToken();
-        if (!token) {
-          await refreshMonthMarks(key);
-          return;
-        }
+        if (!token) return;
         const last = await syncMonth(token, key);
         syncedMonths.current.add(key);
         setLastSyncAt(last);
         await refreshMonthMarks(key);
-        // If we're looking at a day in this month, refresh that day's list too.
         if (startOfMonth(dateKeyRef.current) === key) {
           await loadLocal(dateKeyRef.current);
         }
       } catch (e) {
         const message = e instanceof Error ? e.message : 'Sync failed';
         setError(message);
-        await refreshMonthMarks(key);
       } finally {
         if (monthSyncInFlight.current === key) monthSyncInFlight.current = null;
       }
@@ -239,21 +308,26 @@ export function TodoProvider({ children }: { children: React.ReactNode }) {
     };
   }, []);
 
-  /** Always load + sync the selected day (even if you tap the same day again). */
+  /** Switch day — optional seed paints instantly before SQLite/Google catch up. */
   const setDateKey = useCallback(
-    (key: string) => {
+    (key: string, opts?: { seed?: Todo[] }) => {
+      const gen = ++dayLoadGen.current;
+      if (opts?.seed) {
+        stickySeedDate.current = key;
+        setTodos(opts.seed.filter((t) => !t.inbox));
+      } else if (key !== dateKeyRef.current) {
+        stickySeedDate.current = null;
+        setTodos([]);
+      }
+
       if (key === dateKeyRef.current) {
-        void (async () => {
-          await loadLocal(key);
-          await refreshMonthMarks(key);
-          // Quiet — never trip pull-to-refresh chrome on a day tap.
-          await syncDayNowRef.current(key, { showSpinner: false });
-        })();
+        void loadLocal(key, gen);
+        scheduleBackgroundSync(key);
         return;
       }
       setDateKeyState(key);
     },
-    [loadLocal, refreshMonthMarks]
+    [loadLocal, scheduleBackgroundSync]
   );
 
   const clearError = useCallback(() => setError(null), []);
@@ -310,30 +384,43 @@ export function TodoProvider({ children }: { children: React.ReactNode }) {
     })();
   }, [authReady]);
 
-  // Switching days (and first mount): local first, prefetch month, then refine the day.
+  // Switching days (and first mount): local first — Google sync stays in the background.
   const didInitialLoad = useRef(false);
   useEffect(() => {
     if (!authReady) return;
     let cancelled = false;
+    const gen = dayLoadGen.current;
     (async () => {
-      // Only blank the runway on the very first load — day taps should feel instant.
       const first = !didInitialLoad.current;
       if (first) setLoading(true);
-      await loadLocal(dateKey);
-      await loadInbox();
-      await refreshMonthMarks(dateKey);
-      if (cancelled) return;
+      await loadLocal(dateKey, gen);
+      if (first) {
+        await loadInbox();
+        // Wait for categories when signed in so the grid doesn’t paint “all”
+        // then drop half the chips when readIds arrive.
+        if (!(isSignedIn && calendarsLoading)) {
+          await refreshMonthMarks(dateKey);
+        }
+      }
+      if (cancelled || gen !== dayLoadGen.current) return;
       setLoading(false);
       didInitialLoad.current = true;
-      await ensureMonthSyncedRef.current(startOfMonth(dateKey));
-      if (cancelled) return;
-      // Background Google sync — do not drive RefreshControl (that shifts the page down).
-      await syncDayNowRef.current(dateKey, { showSpinner: false });
+      void ensureMonthSyncedRef.current(startOfMonth(dateKey));
+      scheduleBackgroundSync(dateKey);
     })();
     return () => {
       cancelled = true;
     };
-  }, [authReady, dateKey, isSignedIn, loadInbox, loadLocal, refreshMonthMarks]);
+  }, [
+    authReady,
+    dateKey,
+    isSignedIn,
+    calendarsLoading,
+    loadInbox,
+    loadLocal,
+    refreshMonthMarks,
+    scheduleBackgroundSync,
+  ]);
 
   // Calendars often finish after the first sync — pull again so the day isn’t empty.
   useEffect(() => {
@@ -342,11 +429,12 @@ export function TodoProvider({ children }: { children: React.ReactNode }) {
     scheduleBackgroundSync(dateKeyRef.current);
   }, [authReady, isSignedIn, calendarsLoading, calendars.length, scheduleBackgroundSync]);
 
-  // Recompute month dots whenever category visibility changes.
+  // Recompute month dots when categories settle / change — not while still loading.
   useEffect(() => {
     if (!authReady) return;
+    if (isSignedIn && calendarsLoading) return;
     void refreshMonthMarks(dateKeyRef.current);
-  }, [authReady, readIds, refreshMonthMarks]);
+  }, [authReady, readIds, calendarsLoading, isSignedIn, refreshMonthMarks]);
 
   const onCategoriesChanged = useCallback(async () => {
     syncedMonths.current.clear();
@@ -702,6 +790,7 @@ export function TodoProvider({ children }: { children: React.ReactNode }) {
       schedule,
       anytime,
       markedDates,
+      monthTodosByDate,
       loading,
       syncing,
       lastSyncAt,
@@ -730,6 +819,7 @@ export function TodoProvider({ children }: { children: React.ReactNode }) {
       schedule,
       anytime,
       markedDates,
+      monthTodosByDate,
       loading,
       syncing,
       lastSyncAt,

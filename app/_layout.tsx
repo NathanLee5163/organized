@@ -19,12 +19,12 @@ import 'react-native-reanimated';
 import { Fonts } from '@/constants/Colors';
 import { AuthProvider } from '@/src/auth/AuthContext';
 import { CalendarProvider } from '@/src/calendar/CalendarContext';
+import { GoalProvider } from '@/src/context/GoalContext';
 import { TodoProvider } from '@/src/context/TodoContext';
 import { ThemeProvider, useAppTheme } from '@/src/theme/ThemeContext';
 import { PreferencesProvider } from '@/src/preferences/PreferencesContext';
 import { NotificationScheduler } from '@/src/notifications/NotificationScheduler';
 import { prepareSounds } from '@/src/utils/sounds';
-
 export { ErrorBoundary } from 'expo-router';
 
 export const unstable_settings = {
@@ -63,8 +63,10 @@ export default function RootLayout() {
         <AuthProvider>
           <CalendarProvider>
             <TodoProvider>
-              <NotificationScheduler />
-              <RootLayoutNav />
+              <GoalProvider>
+                <NotificationScheduler />
+                <RootLayoutNav />
+              </GoalProvider>
             </TodoProvider>
           </CalendarProvider>
         </AuthProvider>

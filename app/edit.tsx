@@ -73,6 +73,7 @@ export default function EditScreen() {
   const [exdates, setExdates] = useState<string[]>([]);
   const [dockedFromLoose, setDockedFromLoose] = useState(false);
   const [dockCount, setDockCount] = useState(0);
+  const [goalId, setGoalId] = useState<string | null>(null);
 
   useEffect(() => {
     if (!params.id && writeCalendarId && !calendarId) {
@@ -118,6 +119,7 @@ export default function EditScreen() {
       setExdates(todo.exdates ?? []);
       setDockedFromLoose(todo.dockedFromLoose ?? false);
       setDockCount(todo.dockCount ?? 0);
+      setGoalId(todo.goalId ?? null);
       setLoading(false);
     })();
     return () => {
@@ -180,6 +182,7 @@ export default function EditScreen() {
     inbox: inboxMode,
     dockedFromLoose: inboxMode ? false : dockedFromLoose,
     dockCount,
+    goalId,
     completed,
     calendarId: inboxMode ? null : calendarId,
     googleEventId: inboxMode ? null : googleEventId,

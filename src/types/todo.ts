@@ -24,6 +24,8 @@ export type Todo = {
   dockedFromLoose: boolean;
   /** How many times this item has been docked onto the runway. */
   dockCount: number;
+  /** When set, this runway block is a scheduled installment toward a Goal. */
+  goalId: string | null;
   completed: boolean;
   calendarId: string | null;
   googleEventId: string | null;

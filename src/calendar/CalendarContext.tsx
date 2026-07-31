@@ -61,6 +61,19 @@ export function CalendarProvider({ children }: { children: React.ReactNode }) {
   const [writeCalendarId, setWriteId] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
+  // Hydrate category prefs before the network reload so the first paint
+  // already filters — never “show all then drop half”.
+  useEffect(() => {
+    void (async () => {
+      const [ids, writeId] = await Promise.all([
+        getReadCalendarIds(),
+        getWriteCalendarId(),
+      ]);
+      if (ids.length) setReadIds(ids);
+      if (writeId) setWriteId(writeId);
+    })();
+  }, []);
+
   const reload = useCallback(async () => {
     if (!isSignedIn) {
       setCalendars([]);
@@ -187,7 +200,8 @@ export function CalendarProvider({ children }: { children: React.ReactNode }) {
     (id: string | null | undefined) => {
       if (!isSignedIn) return true;
       if (!id) return true;
-      // Before categories load, don't hide everything.
+      // Never ignore known readIds during a reload — that painted every chip
+      // then wiped half when loading flipped false.
       if (readIds.length === 0) return true;
       return readIds.includes(id);
     },

@@ -23,6 +23,8 @@ type Props = {
   emptyTitle: string;
   emptyMessage: string;
   emptyCta: string;
+  /** Staggered enter motion — off for dense / frequently refreshed lists. */
+  animateEnter?: boolean;
 };
 
 function durationLabel(minutes: number): string {
@@ -59,6 +61,7 @@ export function FlowBoard({
   emptyTitle,
   emptyMessage,
   emptyCta,
+  animateEnter = true,
 }: Props) {
   const colors = useThemeColors();
   const { calendarById, colorForCalendar } = useCalendars();
@@ -125,7 +128,11 @@ export function FlowBoard({
           return (
             <Animated.View
               key={`${todo.id}-${todo.date}`}
-              entering={FadeInDown.delay(Math.min(index * 45, 220)).duration(320)}>
+              entering={
+                animateEnter
+                  ? FadeInDown.delay(Math.min(index * 45, 220)).duration(320)
+                  : undefined
+              }>
               {whisper ? (
                 <View style={styles.gapRow}>
                   <View style={styles.timeGutter} />
@@ -231,6 +238,8 @@ export function FlowBoard({
                       ]}>
                       {todo.completed ? (
                         <Text style={[styles.checkMark, { color: colors.onTint }]}>✓</Text>
+                      ) : todo.goalId ? (
+                        <Text style={[styles.checkMark, { color: colors.textSecondary }]}>◇</Text>
                       ) : todo.dockedFromLoose ? (
                         <Text style={[styles.checkMark, { color: colors.textSecondary }]}>?</Text>
                       ) : null}
@@ -243,8 +252,14 @@ export function FlowBoard({
                       {todo.kind === 'anytime'
                         ? 'Anytime'
                         : durationLabel(todo.durationMinutes)}
-                      {todo.dockedFromLoose ? ' · from Loose' : null}
-                      {(todo.dockCount ?? 0) > 0 ? ` · docked ${todo.dockCount}×` : null}
+                      {todo.goalId
+                        ? ' · goal'
+                        : todo.dockedFromLoose
+                          ? ' · from Loose'
+                          : null}
+                      {!todo.goalId && (todo.dockCount ?? 0) > 0
+                        ? ` · docked ${todo.dockCount}×`
+                        : null}
                       {todo.recurrence ? ' · repeats' : null}
                       {cal ? ` · ${cal.summary}` : null}
                     </Text>
